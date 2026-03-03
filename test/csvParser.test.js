@@ -176,11 +176,6 @@ describe("parseCSV — MERX format (headerless long format)", () => {
   const csv = readFixture("merx-format.csv");
   const result = parseCSV(csv);
 
-  it("parses readings from the data", () => {
-    // 108 DET rows total (including 3 summary rows)
-    expect(result.data.length).toBeGreaterThanOrEqual(100);
-  });
-
   it("does not need user confirmation", () => {
     expect(result.needsConfirmation).toBe(false);
   });
@@ -210,15 +205,11 @@ describe("parseCSV — MERX format (headerless long format)", () => {
     expect(typicalReadings.length).toBeGreaterThan(50);
   });
 
-  it("first half-hourly reading is 11 Feb 2025 00:00", () => {
-    // First data point (may be a summary row at same timestamp)
-    const firstFeb11 = result.data.find(
-      (d) => d.timestamp.getDate() === 11 && d.kwh < 1
-    );
-    expect(firstFeb11).toBeDefined();
-    expect(firstFeb11.timestamp.getFullYear()).toBe(2025);
-    expect(firstFeb11.timestamp.getMonth()).toBe(1); // February
-    expect(firstFeb11.timestamp.getDate()).toBe(11);
+  it("first reading is 11 Feb 2025 00:00", () => {
+    const first = result.data[0];
+    expect(first.timestamp.getFullYear()).toBe(2025);
+    expect(first.timestamp.getMonth()).toBe(1); // February
+    expect(first.timestamp.getDate()).toBe(11);
   });
 
   it("data is sorted chronologically", () => {
@@ -233,6 +224,56 @@ describe("parseCSV — MERX format (headerless long format)", () => {
     for (const d of result.data) {
       expect(d.kwh).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  // ─── Summary row handling ─────────────────────────────────
+
+  it("removes summary rows that span longer than 30 minutes", () => {
+    // The fixture has 3 summary rows: 7.94, 1.06, 20.66 kWh
+    // After removal, no reading should exceed ~1 kWh
+    const highValues = result.data.filter((d) => d.kwh > 5);
+    expect(highValues).toHaveLength(0);
+  });
+
+  it("fills gaps with previous day's profile to produce complete days", () => {
+    // Fixture: Feb 11 = 48 half-hourly, Feb 12 = 10 half-hourly + summary,
+    // Feb 13 gap = covered by 20.66 summary ending 13/02/2025 23:59:53.
+    // After filling: 3 complete days × 48 = 144 readings.
+    expect(result.data.length).toBe(144);
+
+    // Each day should have 48 readings
+    const byDate = {};
+    for (const d of result.data) {
+      const key = d.timestamp.toLocaleDateString("en-NZ");
+      byDate[key] = (byDate[key] || 0) + 1;
+    }
+    expect(Object.keys(byDate)).toHaveLength(3);
+    for (const count of Object.values(byDate)) {
+      expect(count).toBe(48);
+    }
+  });
+
+  it("approximated readings use the previous day's consumption profile", () => {
+    // Feb 12 05:00–23:30 should be filled from Feb 11's readings.
+    // Feb 11 12:00 has kWh=0.76, so Feb 12 12:00 (filled) should match.
+    const feb11noon = result.data.find(
+      (d) => d.timestamp.getDate() === 11 && d.timestamp.getHours() === 12 && d.timestamp.getMinutes() === 0
+    );
+    const feb12noon = result.data.find(
+      (d) => d.timestamp.getDate() === 12 && d.timestamp.getHours() === 12 && d.timestamp.getMinutes() === 0
+    );
+    expect(feb11noon).toBeDefined();
+    expect(feb12noon).toBeDefined();
+    expect(feb12noon.kwh).toBe(feb11noon.kwh);
+  });
+
+  it("emits a warning about aggregated summary rows", () => {
+    const summaryWarning = result.warnings.find((w) =>
+      w.includes("span longer than 30 minutes")
+    );
+    expect(summaryWarning).toBeDefined();
+    expect(summaryWarning).toContain("3 reading(s)");
+    expect(summaryWarning).toContain("approximated");
   });
 });
 

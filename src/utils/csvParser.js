@@ -255,6 +255,140 @@ function scoreKwhColumn(values) {
   return score;
 }
 
+// ─── Summary-row handling ────────────────────────────────────
+
+/**
+ * Round a Date down to the nearest half-hour boundary (local time).
+ */
+function toSlotTime(date) {
+  const d = new Date(date);
+  d.setSeconds(0, 0);
+  d.setMinutes(d.getMinutes() >= 30 ? 30 : 0);
+  return d.getTime();
+}
+
+/** Local-date key "YYYY-MM-DD" without UTC conversion. */
+function localDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Local-time key "HH:MM". */
+function localTimeKey(d) {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * Detect summary/aggregate rows (time span > 30 min), remove them, and fill
+ * the resulting gaps using the previous day's consumption profile.
+ *
+ * Returns the cleaned+filled data array, or the original data unchanged if no
+ * summary rows are found.
+ */
+function handleSummaryRows(data, dataRows, startCol, endCol, kwhCol, warnings) {
+  if (endCol < 0) return data;
+
+  const HALF_HOUR = 30 * 60 * 1000;
+  const MAX_NORMAL_SPAN = 45 * 60 * 1000;
+
+  // Parse both timestamps for every raw row to detect summaries
+  const summaryEntries = [];
+  let expectedEnd = null;
+
+  for (const row of dataRows) {
+    const startRaw = startCol >= 0 && startCol < row.length ? row[startCol] : null;
+    const endRaw = endCol >= 0 && endCol < row.length ? row[endCol] : null;
+    const kwhRaw = kwhCol >= 0 && kwhCol < row.length ? row[kwhCol] : null;
+
+    const start = tryParseDate(String(startRaw || ""));
+    const end = tryParseDate(String(endRaw || ""));
+    const kwh = parseFloat(kwhRaw);
+
+    if (!start || !end || isNaN(kwh)) continue;
+
+    const span = end.getTime() - start.getTime();
+
+    // Track the latest end time across ALL rows (including summaries)
+    if (!expectedEnd || end.getTime() > expectedEnd.getTime()) {
+      expectedEnd = end;
+    }
+
+    if (span > MAX_NORMAL_SPAN) {
+      summaryEntries.push({ start, end, kwh });
+    }
+  }
+
+  if (summaryEntries.length === 0) return data;
+
+  // Remove summary rows from data — match by (timestamp, kwh) pair
+  const summaryKeys = new Set(
+    summaryEntries.map((s) => `${s.start.getTime()}_${s.kwh}`)
+  );
+  let cleaned = data.filter(
+    (d) => !summaryKeys.has(`${d.timestamp.getTime()}_${d.kwh}`)
+  );
+
+  cleaned.sort((a, b) => a.timestamp - b.timestamp);
+  if (cleaned.length === 0) return data; // Safety: don't return empty
+
+  // Build lookup: dateKey → Map(timeKey → kwh)
+  const byDayTime = new Map();
+  for (const d of cleaned) {
+    const slot = new Date(toSlotTime(d.timestamp));
+    const dk = localDateKey(slot);
+    const tk = localTimeKey(slot);
+    if (!byDayTime.has(dk)) byDayTime.set(dk, new Map());
+    byDayTime.get(dk).set(tk, d.kwh);
+  }
+
+  // Determine expected range
+  const firstSlot = toSlotTime(cleaned[0].timestamp);
+  const lastSlot = expectedEnd ? toSlotTime(expectedEnd) : toSlotTime(cleaned[cleaned.length - 1].timestamp);
+
+  // Build set of existing slot keys for fast lookup
+  const existingSlots = new Set(cleaned.map((d) => toSlotTime(d.timestamp)));
+
+  // Walk the grid, fill gaps from the previous day's profile
+  let filledCount = 0;
+  for (let t = firstSlot; t <= lastSlot; t += HALF_HOUR) {
+    if (existingSlots.has(t)) continue;
+
+    const slotDate = new Date(t);
+    const tk = localTimeKey(slotDate);
+
+    // Look for same time-of-day on the previous calendar day
+    const prevDay = new Date(slotDate);
+    prevDay.setDate(prevDay.getDate() - 1);
+    const prevDk = localDateKey(prevDay);
+
+    let approxKwh = null;
+    if (byDayTime.has(prevDk) && byDayTime.get(prevDk).has(tk)) {
+      approxKwh = byDayTime.get(prevDk).get(tk);
+    }
+
+    if (approxKwh !== null) {
+      cleaned.push({ timestamp: new Date(t), kwh: approxKwh });
+      existingSlots.add(t);
+      filledCount++;
+
+      // Update lookup so subsequent days can chain from this one
+      const dk = localDateKey(slotDate);
+      if (!byDayTime.has(dk)) byDayTime.set(dk, new Map());
+      byDayTime.get(dk).set(tk, approxKwh);
+    }
+  }
+
+  warnings.push(
+    `Retailer data contains ${summaryEntries.length} reading(s) that span longer than 30 minutes ` +
+    `(aggregated summary rows instead of half-hourly interval data). ` +
+    `These were removed and ${filledCount} half-hourly slot(s) were approximated using the previous day's consumption profile.`
+  );
+
+  cleaned.sort((a, b) => a.timestamp - b.timestamp);
+  return cleaned;
+}
+
+// ─── Misc helpers ───────────────────────────────────────────
+
 /**
  * Detect if the data is transposed (timestamps running across columns).
  * Heuristic: if the first row has many date-like values, it's transposed.
@@ -399,6 +533,20 @@ export function parseCSV(fileContent) {
     }
   }
 
+  // Find second-best timestamp column (potential end-time column)
+  let secondTimestampCol = -1;
+  let secondTimestampScore = 0;
+  for (let col = 0; col < numCols; col++) {
+    if (col === bestTimestampCol || col === bestKwhCol) continue;
+    const values = dataRows.map((r) => (col < r.length ? r[col] : ""));
+    const score = scoreTimestampColumn(values);
+    if (score > secondTimestampScore) {
+      secondTimestampScore = score;
+      secondTimestampCol = col;
+    }
+  }
+  if (secondTimestampScore < 0.5) secondTimestampCol = -1;
+
   const needsConfirmation = bestTimestampScore < 0.5 || bestKwhScore < 0.5;
 
   if (needsConfirmation) {
@@ -406,7 +554,7 @@ export function parseCSV(fileContent) {
   }
 
   // Parse the data
-  const data = [];
+  let data = [];
   let parseErrors = 0;
 
   for (const row of dataRows) {
@@ -429,6 +577,9 @@ export function parseCSV(fileContent) {
 
   // Sort by timestamp
   data.sort((a, b) => a.timestamp - b.timestamp);
+
+  // Detect and handle summary/aggregate rows (span > 30 min)
+  data = handleSummaryRows(data, dataRows, bestTimestampCol, secondTimestampCol, bestKwhCol, warnings);
 
   // Validate: check for implausibly large values
   const highValues = data.filter((d) => d.kwh > 5);
