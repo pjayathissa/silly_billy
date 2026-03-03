@@ -170,6 +170,72 @@ describe("parseCSV — cross-format consistency", () => {
   });
 });
 
+// ─── MERX format tests (no header row, DD/MM/YYYY HH:mm:ss) ────
+
+describe("parseCSV — MERX format (headerless long format)", () => {
+  const csv = readFixture("merx-format.csv");
+  const result = parseCSV(csv);
+
+  it("parses readings from the data", () => {
+    // 108 DET rows total (including 3 summary rows)
+    expect(result.data.length).toBeGreaterThanOrEqual(100);
+  });
+
+  it("does not need user confirmation", () => {
+    expect(result.needsConfirmation).toBe(false);
+  });
+
+  it("interprets DD/MM/YYYY dates as NZ format (not US MM/DD)", () => {
+    // 11/02/2025 should be February 11, not November 2
+    const allInFeb = result.data.every(
+      (d) => d.timestamp.getMonth() === 1 // January=0, February=1
+    );
+    expect(allInFeb).toBe(true);
+
+    const anyInNov = result.data.some(
+      (d) => d.timestamp.getMonth() === 10 // November=10
+    );
+    expect(anyInNov).toBe(false);
+  });
+
+  it("picks the correct kWh column (not the all-zero column)", () => {
+    // Column 3 has "000" (all zeros). Column 12 has actual readings.
+    const nonZero = result.data.filter((d) => d.kwh > 0);
+    expect(nonZero.length).toBeGreaterThan(0);
+
+    // Most half-hourly readings are 0.02–0.76
+    const typicalReadings = result.data.filter(
+      (d) => d.kwh > 0 && d.kwh < 1
+    );
+    expect(typicalReadings.length).toBeGreaterThan(50);
+  });
+
+  it("first half-hourly reading is 11 Feb 2025 00:00", () => {
+    // First data point (may be a summary row at same timestamp)
+    const firstFeb11 = result.data.find(
+      (d) => d.timestamp.getDate() === 11 && d.kwh < 1
+    );
+    expect(firstFeb11).toBeDefined();
+    expect(firstFeb11.timestamp.getFullYear()).toBe(2025);
+    expect(firstFeb11.timestamp.getMonth()).toBe(1); // February
+    expect(firstFeb11.timestamp.getDate()).toBe(11);
+  });
+
+  it("data is sorted chronologically", () => {
+    for (let i = 1; i < result.data.length; i++) {
+      expect(result.data[i].timestamp.getTime()).toBeGreaterThanOrEqual(
+        result.data[i - 1].timestamp.getTime()
+      );
+    }
+  });
+
+  it("all kWh values are non-negative", () => {
+    for (const d of result.data) {
+      expect(d.kwh).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
 // ─── Edge cases ─────────────────────────────────────────────────
 
 describe("parseCSV — edge cases", () => {

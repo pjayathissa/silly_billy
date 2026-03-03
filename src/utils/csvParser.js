@@ -197,11 +197,8 @@ function tryParseDate(str) {
     if (!isNaN(d2.getTime()) && d2.getDate() === month) return d2;
   }
 
-  // Try native parse
-  const d = new Date(s);
-  if (!isNaN(d.getTime()) && d.getFullYear() > 2000) return d;
-
-  // Try DD/MM/YYYY HH:mm format (common in NZ)
+  // Try DD/MM/YYYY HH:mm:ss format (common in NZ) — must run before native
+  // parse to avoid US-style MM/DD misinterpretation of slash-separated dates
   const m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (m) {
     const year = m[3].length === 2 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
@@ -211,6 +208,10 @@ function tryParseDate(str) {
     const date2 = new Date(year, parseInt(m[1]) - 1, parseInt(m[2]), parseInt(m[4]), parseInt(m[5]));
     if (!isNaN(date2.getTime())) return date2;
   }
+
+  // Try native parse (handles ISO formats like "2025-03-03 00:00:00")
+  const d = new Date(s);
+  if (!isNaN(d.getTime()) && d.getFullYear() > 2000) return d;
 
   return null;
 }
@@ -235,12 +236,23 @@ function scoreTimestampColumn(values) {
 
 /**
  * Score a column as a potential kWh column.
- * Returns fraction of rows with reasonable kWh values.
+ * Returns fraction of rows with reasonable kWh values,
+ * penalised if all values are identical (e.g. a column of all zeros).
  */
 function scoreKwhColumn(values) {
   const sample = values.slice(0, 50);
   const hits = sample.filter((v) => isReasonableKwh(v)).length;
-  return hits / sample.length;
+  let score = hits / sample.length;
+
+  // Penalise columns where every sampled value is the same — real consumption
+  // data always has some variance.
+  const nums = sample.map((v) => parseFloat(v)).filter((n) => !isNaN(n));
+  if (nums.length > 1) {
+    const allSame = nums.every((n) => n === nums[0]);
+    if (allSame) score *= 0.1;
+  }
+
+  return score;
 }
 
 /**
