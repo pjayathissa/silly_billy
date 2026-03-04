@@ -277,6 +277,61 @@ describe("parseCSV — MERX format (headerless long format)", () => {
   });
 });
 
+// ─── CTCT format tests (extra trailing column of zeros) ─────────
+
+describe("parseCSV — CTCT format", () => {
+  const csv = readFixture("ctct-format.csv");
+  const result = parseCSV(csv);
+
+  it("parses all 50 half-hourly readings", () => {
+    expect(result.data.length).toBe(50);
+  });
+
+  it("does not need user confirmation", () => {
+    expect(result.needsConfirmation).toBe(false);
+  });
+
+  it("picks the real kWh column, not a timestamp column", () => {
+    // Timestamp strings like "01/12/2024 00:00:01" must not be mistaken
+    // for kWh via partial parseFloat (which would yield 1).
+    const suspectValues = result.data.filter(
+      (d) => d.kwh === 1 || d.kwh === 2
+    );
+    // The fixture has no actual kWh readings of exactly 1.00 or 2.00
+    expect(suspectValues).toHaveLength(0);
+  });
+
+  it("correctly reads kWh values from column 12", () => {
+    expect(result.data[0].kwh).toBeCloseTo(0.09, 2);
+    expect(result.data[4].kwh).toBeCloseTo(0.51, 2);
+    // Row with 1.08 kWh (09:00 slot)
+    const highReading = result.data.find((d) => d.kwh > 1);
+    expect(highReading).toBeDefined();
+    expect(highReading.kwh).toBeCloseTo(1.08, 2);
+  });
+
+  it("interprets 01/12/2024 as December 1 (DD/MM/YYYY)", () => {
+    const allDec = result.data.every(
+      (d) => d.timestamp.getMonth() === 11 // December
+    );
+    expect(allDec).toBe(true);
+  });
+
+  it("data is sorted chronologically", () => {
+    for (let i = 1; i < result.data.length; i++) {
+      expect(result.data[i].timestamp.getTime()).toBeGreaterThanOrEqual(
+        result.data[i - 1].timestamp.getTime()
+      );
+    }
+  });
+
+  it("all kWh values are non-negative", () => {
+    for (const d of result.data) {
+      expect(d.kwh).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
 // ─── Edge cases ─────────────────────────────────────────────────
 
 describe("parseCSV — edge cases", () => {

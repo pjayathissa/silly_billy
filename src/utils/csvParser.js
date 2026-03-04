@@ -218,9 +218,12 @@ function tryParseDate(str) {
 
 /**
  * Check if a value looks like a reasonable half-hourly kWh reading.
+ * Uses Number() for strings to reject partial parses (e.g. "01/12/2024"
+ * would parseFloat as 1, but Number() correctly returns NaN).
  */
 function isReasonableKwh(val) {
-  const n = parseFloat(val);
+  if (val === null || val === undefined || val === "") return false;
+  const n = typeof val === "string" ? Number(val) : parseFloat(val);
   return !isNaN(n) && n >= 0 && n <= 10;
 }
 
