@@ -258,6 +258,19 @@ function scoreKwhColumn(values) {
   return score;
 }
 
+/**
+ * Score a column as a potential half-hourly interval number column.
+ * Values should be integers in range 1–48.
+ */
+function scoreIntervalColumn(values) {
+  const sample = values.slice(0, 50);
+  const hits = sample.filter((v) => {
+    const n = typeof v === "number" ? v : parseInt(v);
+    return Number.isInteger(n) && n >= 1 && n <= 48;
+  }).length;
+  return hits / sample.length;
+}
+
 // ─── Summary-row handling ────────────────────────────────────
 
 /**
@@ -438,6 +451,22 @@ export function parseCSV(fileContent) {
     return { data: [], warnings: ["File has too few rows."], needsConfirmation: true, preview: rows.slice(0, 5) };
   }
 
+  // Skip preamble rows (title rows, blank separators) — rows where most
+  // fields are empty, e.g. "GE - Interval Consumption Data...,,,,,,"
+  let preambleEnd = 0;
+  while (preambleEnd < rows.length - 5) {
+    const row = rows[preambleEnd];
+    const nonEmpty = row.filter((v) => v !== null && v !== "" && v !== undefined).length;
+    if (nonEmpty < Math.max(2, row.length * 0.5)) {
+      preambleEnd++;
+    } else {
+      break;
+    }
+  }
+  if (preambleEnd > 0) {
+    rows = rows.slice(preambleEnd);
+  }
+
   // Detect transposed data and fix it
   if (isTransposed(rows)) {
     rows = transpose(rows);
@@ -580,6 +609,50 @@ export function parseCSV(fileContent) {
 
   // Sort by timestamp
   data.sort((a, b) => a.timestamp - b.timestamp);
+
+  // If all timestamps are date-only (midnight), look for an interval number
+  // column (1–48) and combine it with the date to build full timestamps.
+  const sampleTs = data.slice(0, 48);
+  const allMidnight = sampleTs.length > 0 && sampleTs.every(
+    (d) => d.timestamp.getHours() === 0 && d.timestamp.getMinutes() === 0 && d.timestamp.getSeconds() === 0
+  );
+
+  if (allMidnight) {
+    let bestIntervalCol = -1;
+    let bestIntervalScore = 0;
+    for (let col = 0; col < numCols; col++) {
+      if (col === bestTimestampCol || col === bestKwhCol) continue;
+      const values = dataRows.map((r) => (col < r.length ? r[col] : ""));
+      const score = scoreIntervalColumn(values);
+      if (score > bestIntervalScore) {
+        bestIntervalScore = score;
+        bestIntervalCol = col;
+      }
+    }
+
+    if (bestIntervalScore > 0.7 && bestIntervalCol >= 0) {
+      const newData = [];
+      for (const row of dataRows) {
+        const tsRaw = bestTimestampCol >= 0 && bestTimestampCol < row.length ? row[bestTimestampCol] : null;
+        const kwhRaw = bestKwhCol >= 0 && bestKwhCol < row.length ? row[bestKwhCol] : null;
+        const intervalRaw = bestIntervalCol < row.length ? row[bestIntervalCol] : null;
+
+        const ts = tryParseDate(String(tsRaw || ""));
+        const kwh = parseFloat(kwhRaw);
+        const interval = typeof intervalRaw === "number" ? intervalRaw : parseInt(intervalRaw);
+
+        if (ts && !isNaN(kwh) && kwh >= 0 && Number.isInteger(interval) && interval >= 1 && interval <= 48) {
+          const totalMinutes = (interval - 1) * 30;
+          ts.setHours(Math.floor(totalMinutes / 60), totalMinutes % 60, 0, 0);
+          newData.push({ timestamp: ts, kwh });
+        }
+      }
+      if (newData.length > 0) {
+        data = newData;
+        data.sort((a, b) => a.timestamp - b.timestamp);
+      }
+    }
+  }
 
   // Detect and handle summary/aggregate rows (span > 30 min)
   data = handleSummaryRows(data, dataRows, bestTimestampCol, secondTimestampCol, bestKwhCol, warnings);

@@ -332,6 +332,59 @@ describe("parseCSV — CTCT format", () => {
   });
 });
 
+// ─── GE format tests (preamble rows, date + interval number) ────
+
+describe("parseCSV — GE format (date + interval number)", () => {
+  const csv = readFixture("ge-format.csv");
+  const result = parseCSV(csv);
+
+  it("parses all 17 readings", () => {
+    expect(result.data.length).toBe(17);
+  });
+
+  it("does not need user confirmation", () => {
+    expect(result.needsConfirmation).toBe(false);
+  });
+
+  it("produces no warnings (preamble rows are silently skipped)", () => {
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it("combines READING_DATE + INTERVAL_NUMBER into correct timestamps", () => {
+    // Interval 1 → 00:00, Interval 2 → 00:30, …, Interval 17 → 08:00
+    const first = result.data[0];
+    expect(first.timestamp.getFullYear()).toBe(2025);
+    expect(first.timestamp.getMonth()).toBe(2); // March
+    expect(first.timestamp.getDate()).toBe(2);
+    expect(first.timestamp.getHours()).toBe(0);
+    expect(first.timestamp.getMinutes()).toBe(0);
+
+    const last = result.data[result.data.length - 1];
+    expect(last.timestamp.getHours()).toBe(8);
+    expect(last.timestamp.getMinutes()).toBe(0);
+  });
+
+  it("reads kWh from CONSUMPTION_VALUE_AMS column", () => {
+    expect(result.data[0].kwh).toBeCloseTo(0.086, 3);
+    expect(result.data[1].kwh).toBeCloseTo(0.076, 3);
+    // Interval 10 (index 9) = 0.187
+    expect(result.data[9].kwh).toBeCloseTo(0.187, 3);
+  });
+
+  it("data is sorted chronologically with 30-minute spacing", () => {
+    for (let i = 1; i < result.data.length; i++) {
+      const diff = result.data[i].timestamp - result.data[i - 1].timestamp;
+      expect(diff).toBe(30 * 60 * 1000);
+    }
+  });
+
+  it("all kWh values are non-negative", () => {
+    for (const d of result.data) {
+      expect(d.kwh).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
 // ─── Edge cases ─────────────────────────────────────────────────
 
 describe("parseCSV — edge cases", () => {
