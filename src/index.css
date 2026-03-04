@@ -243,6 +243,118 @@ h3 {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
 }
 
+/* ── Time-of-Use Section ──────────────────────────────── */
+.tou-section {
+  margin-top: 0.5rem;
+}
+
+.tou-section h3 {
+  margin-bottom: 0.25rem;
+}
+
+.tou-hint {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.tou-entry {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tou-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tou-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.tou-remove-btn {
+  background: none;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  border-radius: 6px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tou-remove-btn:hover {
+  background: #fef2f2;
+}
+
+.tou-days {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tou-days > label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.day-checkboxes {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.day-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+
+.day-checkbox input[type="checkbox"] {
+  accent-color: #3b82f6;
+  cursor: pointer;
+}
+
+/* ── TOU Chart Legend ─────────────────────────────────── */
+.tou-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.tou-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.tou-legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 /* ── Warning Box ───────────────────────────────────────── */
 .warning-box {
   background: #fefce8;
