@@ -1,11 +1,97 @@
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ReferenceArea,
 } from "recharts";
 import {
   dailyProfile, seasonalProfiles, weeklyTrend,
   generateInsights, currentAnnualCost, rankPlans,
 } from "../utils/analysis.js";
+
+// Palette of semi-transparent colours for TOU background bands
+const TOU_COLORS = [
+  "rgba(249, 115, 22, 0.13)",  // orange
+  "rgba(139, 92, 246, 0.13)",  // purple
+  "rgba(20, 184, 166, 0.13)",  // teal
+  "rgba(236, 72, 153, 0.13)",  // pink
+];
+
+const TOU_STROKE_COLORS = [
+  "#f97316",
+  "#8b5cf6",
+  "#14b8a6",
+  "#ec4899",
+];
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/**
+ * Convert an hour number (0–23) to the "HH:00" format used as the x-axis dataKey.
+ */
+function hourToKey(h) {
+  return `${String(h).padStart(2, "0")}:00`;
+}
+
+/**
+ * Build <ReferenceArea> elements for the TOU rates.
+ * Each TOU band spans from startHour to endHour on the half-hour x-axis.
+ * Overnight ranges (e.g. 21–7) are split into two bands: start→23:30 and 00:00→end.
+ */
+function touReferenceAreas(touRates) {
+  if (!touRates || touRates.length === 0) return null;
+
+  const areas = [];
+  touRates.forEach((tou, idx) => {
+    const color = TOU_COLORS[idx % TOU_COLORS.length];
+    const stroke = TOU_STROKE_COLORS[idx % TOU_STROKE_COLORS.length];
+    const daysLabel = tou.days.length === 7
+      ? "All days"
+      : tou.days.map((d) => DAY_NAMES[d]).join(", ");
+    const label = `${tou.rate}c — ${daysLabel}`;
+
+    const startKey = hourToKey(tou.startHour);
+    const endKey = hourToKey(tou.endHour);
+
+    if (tou.startHour < tou.endHour) {
+      // Normal range (e.g. 7–21)
+      areas.push(
+        <ReferenceArea
+          key={`tou-${idx}`}
+          x1={startKey}
+          x2={endKey}
+          fill={color}
+          stroke={stroke}
+          strokeOpacity={0.3}
+          label={{ value: label, position: "insideTop", fontSize: 11, fill: stroke }}
+        />
+      );
+    } else if (tou.startHour > tou.endHour) {
+      // Overnight range (e.g. 21–7) → split into two bands
+      areas.push(
+        <ReferenceArea
+          key={`tou-${idx}-a`}
+          x1={startKey}
+          x2="23:30"
+          fill={color}
+          stroke={stroke}
+          strokeOpacity={0.3}
+          label={{ value: label, position: "insideTop", fontSize: 11, fill: stroke }}
+        />
+      );
+      areas.push(
+        <ReferenceArea
+          key={`tou-${idx}-b`}
+          x1="00:00"
+          x2={endKey}
+          fill={color}
+          stroke={stroke}
+          strokeOpacity={0.3}
+        />
+      );
+    }
+  });
+  return areas;
+}
 
 /**
  * Main analysis dashboard — charts, insights, and plan comparison table.
@@ -28,6 +114,8 @@ export default function Dashboard({ data, currentTariff }) {
   // Only show every 4th x-axis label to avoid crowding
   const tickFilter = (_, i) => i % 4 === 0;
 
+  const touAreas = touReferenceAreas(currentTariff.touRates);
+
   return (
     <div className="dashboard">
       <h2>Analysis Dashboard</h2>
@@ -45,12 +133,34 @@ export default function Dashboard({ data, currentTariff }) {
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={profile}>
             <CartesianGrid strokeDasharray="3 3" />
+            {touAreas}
             <XAxis dataKey="hour" tickFormatter={(v, i) => tickFilter(v, i) ? v : ""} />
             <YAxis unit=" kWh" />
             <Tooltip />
             <Area type="monotone" dataKey="kwh" stroke="#3b82f6" fill="#93c5fd" name="Avg kWh" />
           </AreaChart>
         </ResponsiveContainer>
+        {currentTariff.touRates && currentTariff.touRates.length > 0 && (
+          <div className="tou-legend">
+            {currentTariff.touRates.map((tou, idx) => (
+              <span key={idx} className="tou-legend-item">
+                <span
+                  className="tou-legend-swatch"
+                  style={{ background: TOU_STROKE_COLORS[idx % TOU_STROKE_COLORS.length] }}
+                />
+                {tou.rate}c/kWh ({tou.startHour}:00–{tou.endHour}:00,{" "}
+                {tou.days.length === 7
+                  ? "all days"
+                  : tou.days.map((d) => DAY_NAMES[d]).join(", ")}
+                )
+              </span>
+            ))}
+            <span className="tou-legend-item">
+              <span className="tou-legend-swatch" style={{ background: "#94a3b8" }} />
+              Base rate: {currentTariff.baseRate}c/kWh
+            </span>
+          </div>
+        )}
       </section>
 
       {/* ── Seasonal Comparison ── */}
@@ -60,6 +170,7 @@ export default function Dashboard({ data, currentTariff }) {
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={seasonalMerged}>
             <CartesianGrid strokeDasharray="3 3" />
+            {touAreas}
             <XAxis dataKey="hour" tickFormatter={(v, i) => tickFilter(v, i) ? v : ""} />
             <YAxis unit=" kWh" />
             <Tooltip />
@@ -68,6 +179,27 @@ export default function Dashboard({ data, currentTariff }) {
             <Line type="monotone" dataKey="winter" stroke="#3b82f6" name="Winter" dot={false} />
           </LineChart>
         </ResponsiveContainer>
+        {currentTariff.touRates && currentTariff.touRates.length > 0 && (
+          <div className="tou-legend">
+            {currentTariff.touRates.map((tou, idx) => (
+              <span key={idx} className="tou-legend-item">
+                <span
+                  className="tou-legend-swatch"
+                  style={{ background: TOU_STROKE_COLORS[idx % TOU_STROKE_COLORS.length] }}
+                />
+                {tou.rate}c/kWh ({tou.startHour}:00–{tou.endHour}:00,{" "}
+                {tou.days.length === 7
+                  ? "all days"
+                  : tou.days.map((d) => DAY_NAMES[d]).join(", ")}
+                )
+              </span>
+            ))}
+            <span className="tou-legend-item">
+              <span className="tou-legend-swatch" style={{ background: "#94a3b8" }} />
+              Base rate: {currentTariff.baseRate}c/kWh
+            </span>
+          </div>
+        )}
       </section>
 
       {/* ── Weekly Trend ── */}

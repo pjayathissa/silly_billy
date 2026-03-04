@@ -33,7 +33,7 @@ export default function App() {
     setNeedsCsvConfirm(csv.needsConfirmation);
 
     // Parse PDF if provided
-    let tariff = { retailer: "", plan: "", dailyCharge: null, peakRate: null, offPeakRate: null };
+    let tariff = { retailer: "", plan: "", dailyCharge: null, peakRate: null, offPeakRate: null, baseRate: null };
     if (pdfBuffer) {
       tariff = await extractTariffFromPDF(pdfBuffer);
     }

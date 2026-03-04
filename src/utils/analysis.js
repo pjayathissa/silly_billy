@@ -142,8 +142,8 @@ export function generateInsights(data, currentTariff) {
       text: `Average daily consumption: ${avgSummerDay.toFixed(1)} kWh (summer) vs ${avgWinterDay.toFixed(1)} kWh (winter). Winter is ${diff > 0 ? `${diff.toFixed(1)} kWh higher (+${pct}%)` : `${Math.abs(diff).toFixed(1)} kWh lower`}, suggesting ${diff > 3 ? "significant heating costs — consider insulation or a heat pump if you don't already have one." : diff > 0 ? "moderate heating-related usage." : "minimal heating impact."}`,
     });
 
-    if (diff > 0 && currentTariff.peakRate) {
-      const heatingCostPerYear = (diff * 182 * currentTariff.peakRate) / 100; // 182 winter days
+    if (diff > 0 && currentTariff.baseRate) {
+      const heatingCostPerYear = (diff * 182 * currentTariff.baseRate) / 100; // 182 winter days
       insights.push({
         type: "seasonal_cost",
         text: `Estimated winter heating spend: ~$${heatingCostPerYear.toFixed(0)}/year based on the seasonal difference.`,
@@ -170,22 +170,32 @@ export function generateInsights(data, currentTariff) {
   }
 
   // 4. Load-shifting savings opportunity
-  if (currentTariff.peakRate && currentTariff.offPeakRate) {
-    // Calculate how much daytime (7am–9pm) consumption could be shifted
-    const peakData = data.filter((d) => hour(d.timestamp) >= 7 && hour(d.timestamp) < 21);
-    const totalPeakKwh = peakData.reduce((s, d) => s + d.kwh, 0);
+  const touRates = currentTariff.touRates || [];
+  if (currentTariff.baseRate && touRates.length > 0) {
+    // Find the cheapest TOU rate
+    const cheapestTou = touRates.reduce((min, t) => (t.rate < min.rate ? t : min), touRates[0]);
+    const rateDiff = currentTariff.baseRate - cheapestTou.rate;
 
-    // Assume 20% could be realistically shifted
-    const shiftableKwh = totalPeakKwh * 0.2;
-    const rateDiff = currentTariff.peakRate - currentTariff.offPeakRate;
-    const daysInData = allDays.length;
-    const annualSaving = (shiftableKwh / daysInData) * 365 * rateDiff / 100;
-
-    if (annualSaving > 10) {
-      insights.push({
-        type: "load_shifting",
-        text: `If you shifted ~20% of your daytime usage to off-peak hours (${Math.round(shiftableKwh / daysInData * 365)} kWh/year), you could save approximately $${annualSaving.toFixed(0)}/year at current rates.`,
+    if (rateDiff > 0) {
+      // Calculate consumption during base-rate hours (not covered by any TOU)
+      const baseRateData = data.filter((d) => {
+        const h = hour(d.timestamp);
+        const dow = d.timestamp.getDay();
+        return !touRates.some((tou) => matchesTou(h, dow, tou));
       });
+      const totalBaseKwh = baseRateData.reduce((s, d) => s + d.kwh, 0);
+
+      // Assume 20% could be realistically shifted
+      const shiftableKwh = totalBaseKwh * 0.2;
+      const daysInData = allDays.length;
+      const annualSaving = (shiftableKwh / daysInData) * 365 * rateDiff / 100;
+
+      if (annualSaving > 10) {
+        insights.push({
+          type: "load_shifting",
+          text: `If you shifted ~20% of your base-rate usage to cheaper time-of-use hours (${Math.round(shiftableKwh / daysInData * 365)} kWh/year), you could save approximately $${annualSaving.toFixed(0)}/year at current rates.`,
+        });
+      }
     }
   }
 
@@ -268,8 +278,24 @@ export function annualCost(data, plan) {
 }
 
 /**
+ * Check whether a given hour + day-of-week falls within a TOU rate period.
+ * Handles overnight ranges (e.g. startHour 21, endHour 7).
+ */
+export function matchesTou(h, dayOfWeek, tou) {
+  if (!tou.days.includes(dayOfWeek)) return false;
+  const { startHour, endHour } = tou;
+  if (startHour > endHour) {
+    return h >= startHour || h < endHour;
+  } else if (startHour < endHour) {
+    return h >= startHour && h < endHour;
+  }
+  return false; // startHour === endHour → zero-width window
+}
+
+/**
  * Compute estimated annual cost for the user's current tariff.
- * currentTariff: { dailyCharge, peakRate, offPeakRate, peakStart, peakEnd } in cents.
+ * currentTariff: { dailyCharge, baseRate, touRates: [{ rate, startHour, endHour, days }] }
+ * All monetary values in cents.
  */
 export function currentAnnualCost(data, ct) {
   const first = data[0].timestamp;
@@ -279,20 +305,19 @@ export function currentAnnualCost(data, ct) {
 
   const scaleFactor = 365 / days;
   const fixedCost = ((ct.dailyCharge || 0) / 100) * 365;
+  const touRates = ct.touRates || [];
 
   let energyCost = 0;
   for (const d of data) {
     const h = hour(d.timestamp);
-    let rate = ct.peakRate || 0;
+    const dow = d.timestamp.getDay(); // 0=Sun … 6=Sat
+    let rate = ct.baseRate || 0;
 
-    // If off-peak rate is set and we have peak hours, use TOU logic
-    if (ct.offPeakRate && ct.peakStart !== undefined && ct.peakEnd !== undefined) {
-      const start = ct.peakStart;
-      const end = ct.peakEnd;
-      if (start > end) {
-        rate = (h >= start || h < end) ? ct.peakRate : ct.offPeakRate;
-      } else {
-        rate = (h >= start && h < end) ? ct.peakRate : ct.offPeakRate;
+    // First matching TOU rate wins
+    for (const tou of touRates) {
+      if (matchesTou(h, dow, tou)) {
+        rate = tou.rate;
+        break;
       }
     }
 
