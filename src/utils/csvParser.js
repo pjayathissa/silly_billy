@@ -29,11 +29,11 @@ const KWH_PATTERNS = [
 // ─── Wide-format time-slot header patterns ──────────────────
 
 /**
- * Match headers like ID12_00AM, ID01_30PM (NZ retailer format).
+ * Match headers like ID12_00AM, ID01_30PM or ID12 00AM, ID01 30PM (NZ retailer format).
  * Returns { hour24, minute } or null.
  */
 function parseIdTimeHeader(header) {
-  const m = header.match(/^ID(\d{2})_(\d{2})(AM|PM)$/i);
+  const m = header.match(/^ID(\d{2})[_ ](\d{2})(AM|PM)$/i);
   if (!m) return null;
   let hour = parseInt(m[1]);
   const minute = parseInt(m[2]);
