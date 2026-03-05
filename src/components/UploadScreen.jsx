@@ -22,10 +22,11 @@ export default function UploadScreen({ onUpload }) {
   return (
     <div className="upload-screen">
       <h1>Energy Bill Analyst</h1>
-      <p className="subtitle">
-        Upload your half-hourly consumption data and electricity bill to get
-        personalised insights and plan recommendations.
-      </p>
+      <ol className="subtitle">
+        <li>Request 12 months electricity data from your retailer in csv format</li>
+        <li>Upload the csv file below</li>
+        <li>Optional - upload a pdf copy of your bill</li>
+      </ol>
 
       <div className="upload-boxes">
         <label className={`upload-box ${csvFile ? "has-file" : ""}`}>
