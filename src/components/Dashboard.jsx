@@ -7,6 +7,7 @@ import {
   dailyProfile, seasonalProfiles, weeklyTrend,
   generateInsights, currentAnnualCost, rankPlans,
 } from "../utils/analysis.js";
+import { tariffsLastUpdated } from "../tariffs.js";
 
 // Palette of semi-transparent colours for TOU background bands
 const TOU_COLORS = [
@@ -238,10 +239,18 @@ export default function Dashboard({ data, currentTariff }) {
       {/* ── Plan Comparison Table ── */}
       <section className="plans-section">
         <h3>Plan Recommendations</h3>
+        <p className="data-note" style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.25rem" }}>
+          Data based on AI web search on {tariffsLastUpdated}
+        </p>
         <p className="chart-desc">
           Ranked by estimated annual cost using your actual consumption data.
           Assumes no change in usage behaviour.
         </p>
+        {plans.length > 0 && !plans.some(p => p.saving > 0) && (
+          <p className="no-savings-note" style={{ color: "#b45309", fontWeight: 500, marginBottom: "0.5rem" }}>
+            There is no known plan that would save you money from your current plan.
+          </p>
+        )}
         <div className="table-wrapper">
           <table className="plans-table">
             <thead>
