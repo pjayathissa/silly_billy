@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -7,6 +8,7 @@ import {
   dailyProfile, seasonalProfiles, weeklyTrend,
   generateInsights, currentAnnualCost, rankPlans,
 } from "../utils/analysis.js";
+import { tariffsLastUpdated } from "../tariffs.js";
 
 // Palette of semi-transparent colours for TOU background bands
 const TOU_COLORS = [
@@ -97,6 +99,8 @@ function touReferenceAreas(touRates) {
  * Main analysis dashboard — charts, insights, and plan comparison table.
  */
 export default function Dashboard({ data, currentTariff }) {
+  const [expandedRow, setExpandedRow] = useState(null);
+
   const profile = dailyProfile(data);
   const seasonal = seasonalProfiles(data);
   const weekly = weeklyTrend(data);
@@ -238,10 +242,20 @@ export default function Dashboard({ data, currentTariff }) {
       {/* ── Plan Comparison Table ── */}
       <section className="plans-section">
         <h3>Plan Recommendations</h3>
+        <p className="data-note" style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.25rem" }}>
+          Data based on AI web search on {tariffsLastUpdated}. The data does not
+          take into account regional price differences, and may contain errors.
+          Please check the actual data on the retailer's website.
+        </p>
         <p className="chart-desc">
           Ranked by estimated annual cost using your actual consumption data.
           Assumes no change in usage behaviour.
         </p>
+        {plans.length > 0 && !plans.some(p => p.saving > 0) && (
+          <p className="no-savings-note" style={{ color: "#b45309", fontWeight: 500, marginBottom: "0.5rem" }}>
+            There is no known plan that would save you money from your current plan.
+          </p>
+        )}
         <div className="table-wrapper">
           <table className="plans-table">
             <thead>
@@ -255,18 +269,61 @@ export default function Dashboard({ data, currentTariff }) {
               </tr>
             </thead>
             <tbody>
-              {plans.map((p, i) => (
-                <tr key={i} className={p.saving > 0 ? "saving" : "no-saving"}>
-                  <td>{p.retailer}</td>
-                  <td>{p.plan}</td>
-                  <td>{p.type}</td>
-                  <td>${p.estimatedCost.toLocaleString()}</td>
-                  <td className={p.saving > 0 ? "positive" : "negative"}>
-                    {p.saving > 0 ? `$${p.saving.toLocaleString()}` : `−$${Math.abs(p.saving).toLocaleString()}`}
-                  </td>
-                  <td>{p.features}</td>
-                </tr>
-              ))}
+              {plans.map((p, i) => {
+                const isExpanded = expandedRow === i;
+                return (
+                  <>
+                    <tr
+                      key={i}
+                      className={`${p.saving > 0 ? "saving" : "no-saving"} expandable-row`}
+                      onClick={() => setExpandedRow(isExpanded ? null : i)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <td>{p.retailer}</td>
+                      <td>{p.plan}</td>
+                      <td>{p.type}</td>
+                      <td>${p.estimatedCost.toLocaleString()}</td>
+                      <td className={p.saving > 0 ? "positive" : "negative"}>
+                        {p.saving > 0 ? `$${p.saving.toLocaleString()}` : `−$${Math.abs(p.saving).toLocaleString()}`}
+                      </td>
+                      <td>{p.features}</td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`${i}-detail`} className="plan-detail-row">
+                        <td colSpan={6}>
+                          <div className="plan-detail">
+                            <p className="plan-detail-disclaimer">
+                              These are estimated prices from automated web searches and may not
+                              reflect current rates. Please verify with {p.retailer}'s website
+                              before making any decisions.
+                            </p>
+                            <div className="plan-detail-grid">
+                              <div className="plan-detail-item">
+                                <span className="plan-detail-label">Daily charge</span>
+                                <span className="plan-detail-value">{(p.dailyCharge / 100).toFixed(2)} $/day</span>
+                              </div>
+                              {p.rates.map((r, ri) => (
+                                <div key={ri} className="plan-detail-item">
+                                  <span className="plan-detail-label">{r.name}</span>
+                                  <span className="plan-detail-value">
+                                    {r.centsPerKwh} c/kWh
+                                    {r.startHour != null && r.endHour != null && (
+                                      <> &middot; {String(r.startHour).padStart(2, "0")}:00–{String(r.endHour).padStart(2, "0")}:00</>
+                                    )}
+                                    {r.daysOfWeek && (
+                                      <> &middot; {r.daysOfWeek.map(d => DAY_NAMES[d]).join(", ")}</>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
             </tbody>
           </table>
         </div>

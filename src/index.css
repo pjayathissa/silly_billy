@@ -526,6 +526,55 @@ h3 {
   color: #94a3b8;
 }
 
+/* ── Expandable plan detail rows ───────────────────────── */
+.expandable-row:hover td {
+  background: #f1f5f9;
+}
+
+.plan-detail-row td {
+  padding: 0 !important;
+  background: #fafbfc;
+}
+
+.plan-detail {
+  padding: 0.75rem 1rem;
+  border-left: 3px solid #6366f1;
+}
+
+.plan-detail-disclaimer {
+  font-size: 0.8rem;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  margin: 0 0 0.5rem 0;
+}
+
+.plan-detail-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+.plan-detail-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+}
+
+.plan-detail-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.plan-detail-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
 /* ── Responsive ────────────────────────────────────────── */
 @media (max-width: 640px) {
   #root {

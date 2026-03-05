@@ -294,4 +294,5 @@ const tariffs = [
   },
 ];
 
+export const tariffsLastUpdated = "March 2026";
 export default tariffs;
