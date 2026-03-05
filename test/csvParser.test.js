@@ -385,6 +385,79 @@ describe("parseCSV — GE format (date + interval number)", () => {
   });
 });
 
+// ─── Retail wide format tests (spaces in headers, extra metadata columns) ────
+
+describe("parseCSV — retail wide format (ID12 00AM style headers)", () => {
+  const csv = readFixture("retail-wide-format.csv");
+  const result = parseCSV(csv);
+
+  it("parses 10 days × 48 slots = 480 readings", () => {
+    expect(result.data.length).toBe(480);
+  });
+
+  it("returns no critical warnings", () => {
+    const critical = result.warnings.filter((w) =>
+      w.includes("Could not confidently detect")
+    );
+    expect(critical).toHaveLength(0);
+  });
+
+  it("does not need user confirmation", () => {
+    expect(result.needsConfirmation).toBe(false);
+  });
+
+  it("detects 'reading date' column and parses DD/MM/YYYY dates correctly", () => {
+    const first = result.data[0];
+    // 19/12/2025 should be December 19
+    expect(first.timestamp.getFullYear()).toBe(2025);
+    expect(first.timestamp.getMonth()).toBe(11); // December
+    expect(first.timestamp.getDate()).toBe(19);
+    expect(first.timestamp.getHours()).toBe(0);
+    expect(first.timestamp.getMinutes()).toBe(0);
+  });
+
+  it("first reading (19/12/2025 00:00) has correct kWh", () => {
+    const first = result.data[0];
+    expect(first.kwh).toBeCloseTo(0.315, 3);
+  });
+
+  it("last reading is 28/12/2025 23:30", () => {
+    const last = result.data[result.data.length - 1];
+    expect(last.timestamp.getFullYear()).toBe(2025);
+    expect(last.timestamp.getMonth()).toBe(11); // December
+    expect(last.timestamp.getDate()).toBe(28);
+    expect(last.timestamp.getHours()).toBe(23);
+    expect(last.timestamp.getMinutes()).toBe(30);
+    expect(last.kwh).toBeCloseTo(0.355, 3);
+  });
+
+  it("ignores metadata columns (ICP, meter number, Daily Total Consumption)", () => {
+    // Daily Total Consumption values (17.504, 30.919, etc.) should NOT appear
+    // as individual readings — they exceed typical half-hourly kWh
+    const highValues = result.data.filter((d) => d.kwh > 10);
+    expect(highValues).toHaveLength(0);
+  });
+
+  it("data is sorted chronologically", () => {
+    for (let i = 1; i < result.data.length; i++) {
+      expect(result.data[i].timestamp.getTime()).toBeGreaterThanOrEqual(
+        result.data[i - 1].timestamp.getTime()
+      );
+    }
+  });
+
+  it("all kWh values are non-negative", () => {
+    for (const d of result.data) {
+      expect(d.kwh).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("returns a preview of raw data", () => {
+    expect(result.preview).toBeDefined();
+    expect(result.preview.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
 // ─── Edge cases ─────────────────────────────────────────────────
 
 describe("parseCSV — edge cases", () => {
