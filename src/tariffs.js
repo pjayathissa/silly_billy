@@ -25,7 +25,9 @@
  *   Phase-out schedule (max daily charge, ex-GST): $0.90 (Apr 2023), $1.20 (Apr 2024),
  *   $1.50 (Apr 2025), $1.80 (Apr 2026), fully removed Apr 2027.
  *   As of March 2026, the regulated cap is $1.50/day ex-GST = ~$1.73/day incl. GST
- *   (173c/day). Low-user dailyCharge values below reflect this April 2025 increase.
+ *   (173c/day). From April 2026, the cap rises to $1.80/day ex-GST = ~$2.07/day incl.
+ *   GST (207c/day). Low-user dailyCharge values below reflect the current April 2025 cap;
+ *   update all low-user dailyCharge values to 207 once April 2026 rates take effect.
  *
  * To update: edit the plans array below. Each plan has:
  *   - retailer: company name
@@ -76,18 +78,19 @@ const tariffs = [
 
   // ── Meridian ─────────────────────────────────────────────
   // Note: Meridian acquired Flick Electric (May 2025) and Powershop customers.
+  // Plan formerly known as "Simple", rebranded to "Freedom" (also called "Simple Flexi Plan").
   // Rates updated to reflect post-DPP4 levels.
   {
     retailer: "Meridian",
-    plan: "Simple",
+    plan: "Freedom",
     type: "standard",
     dailyCharge: 245,
     rates: [{ name: "Anytime", centsPerKwh: 31.5 }],
-    features: "Flat rate, no contract",
+    features: "Flat rate, no contract, no break fees",
   },
   {
     retailer: "Meridian",
-    plan: "Simple",
+    plan: "Freedom",
     type: "low",
     dailyCharge: 173,
     rates: [{ name: "Anytime", centsPerKwh: 37.5 }],
@@ -95,7 +98,7 @@ const tariffs = [
   },
   {
     retailer: "Meridian",
-    plan: "Time of Use",
+    plan: "Freedom Time of Use",
     type: "standard",
     dailyCharge: 245,
     rates: [
@@ -184,6 +187,23 @@ const tariffs = [
       { name: "All other times", centsPerKwh: 34.0 },
     ],
     features: "Free power 9am–5pm Sat & Sun only (smart meter required). Higher weekday/off-peak rate offsets free period.",
+  },
+  {
+    retailer: "Contact",
+    plan: "Good Charge",
+    type: "standard",
+    dailyCharge: 240,
+    rates: [
+      // Half-price electricity 9pm–7am every night.
+      {
+        name: "Off-peak (9pm–7am)",
+        centsPerKwh: 17.0,
+        startHour: 21,
+        endHour: 7,
+      },
+      { name: "Day rate", centsPerKwh: 34.0 },
+    ],
+    features: "Half-price electricity 9pm–7am every night (smart meter required). Popular with EV owners.",
   },
 
   // ── Electric Kiwi ────────────────────────────────────────
