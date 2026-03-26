@@ -6,6 +6,8 @@
  * 2. Per-line scanning: each reconstructed line is checked for keywords + rate values
  * 3. Fallback keyword-proximity search for values the line scanner misses
  * 4. Support for cents and dollar formats common in NZ electricity bills
+ * 5. If the PDF has two pages, the parser focuses on the second page
+ * 6. Max/min validation to avoid capturing total costs instead of unit rates
  */
 
 import * as pdfjsLib from "pdfjs-dist";
@@ -16,13 +18,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).href;
 
-// Known NZ retailers for matching (longer names first to prefer e.g. "Flick Electric" over "Flick")
-const RETAILERS = [
-  "Electric Kiwi", "Flick Electric", "Frank Energy", "Octopus Energy",
-  "Nova Energy", "Pulse Energy", "Powershop", "Trustpower",
-  "Mercury", "Meridian", "Genesis", "Contact",
-  "Flick", "Octopus", "Nova", "Pulse",
-];
+// ── Rate validation limits ───────────────────────────────────
+// Daily charge: 0–400 cents/day (i.e. $0–$4.00)
+const DAILY_CHARGE_MIN = 0;
+const DAILY_CHARGE_MAX = 400;
+// Per-kWh rate: 0–100 cents/kWh (i.e. $0–$1.00)
+const KWH_RATE_MIN = 0;
+const KWH_RATE_MAX = 100;
 
 // ── Keyword sets for line classification ─────────────────────
 
@@ -86,38 +88,34 @@ async function extractText(arrayBuffer) {
 
     pages.push(lines.join("\n"));
   }
+
+  // If the PDF has exactly two pages, focus on the second page
+  // (the first page is typically a summary; rate details are on the second)
+  if (pages.length === 2) {
+    return pages[1];
+  }
   return pages.join("\n\n");
 }
 
-// ── Retailer & plan detection ────────────────────────────────
-
-function findRetailer(text) {
-  const lower = text.toLowerCase();
-  for (const name of RETAILERS) {
-    if (lower.includes(name.toLowerCase())) return name;
-  }
-  return "";
-}
-
-function findPlanName(text) {
-  const patterns = [
-    /plan\s*(?:name)?[:\s]+([A-Za-z][\w\s]*?)(?:\n|,|\.|$)/im,
-    /pricing\s*plan[:\s]+([A-Za-z][\w\s]*?)(?:\n|,|\.|$)/im,
-    /tariff[:\s]+([A-Za-z][\w\s]*?)(?:\n|,|\.|$)/im,
-    /rate\s*(?:type)?[:\s]+([A-Za-z][\w\s]*?)(?:\n|,|\.|$)/im,
-    /product[:\s]+([A-Za-z][\w\s]*?)(?:\n|,|\.|$)/im,
-  ];
-  for (const p of patterns) {
-    const m = text.match(p);
-    if (m) {
-      const name = m[1].trim();
-      if (name.length >= 2 && name.length <= 40) return name;
-    }
-  }
-  return "";
-}
-
 // ── Rate extraction from a single line ───────────────────────
+
+/**
+ * Validate a per-kWh rate is within reasonable bounds.
+ * Returns the value if valid, null otherwise.
+ */
+function validateKwhRate(cents) {
+  if (cents != null && cents > KWH_RATE_MIN && cents <= KWH_RATE_MAX) return cents;
+  return null;
+}
+
+/**
+ * Validate a daily charge is within reasonable bounds.
+ * Returns the value if valid, null otherwise.
+ */
+function validateDailyCharge(cents) {
+  if (cents != null && cents > DAILY_CHARGE_MIN && cents <= DAILY_CHARGE_MAX) return cents;
+  return null;
+}
 
 /**
  * Extract a per-kWh rate (in cents) from a line of text.
@@ -128,32 +126,36 @@ function extractKwhRateFromLine(line) {
 
   // 1. Explicit: XX.XX c/kWh or cents/kWh or cents per kWh
   m = line.match(/(\d+\.?\d*)\s*(?:c|cents?)[\s/]*(?:per\s*)?kWh/i);
-  if (m) return parseFloat(m[1]);
+  if (m) return validateKwhRate(parseFloat(m[1]));
 
-  // 2. Explicit: $X.XXXX/kWh or $X.XXXX per kWh
+  // 2. Full word: XX.XX dollars per kWh
+  m = line.match(/(\d+\.?\d*)\s*dollars?\s+per\s+kWh/i);
+  if (m) return validateKwhRate(parseFloat(m[1]) * 100);
+
+  // 3. Explicit: $X.XXXX/kWh or $X.XXXX per kWh
   m = line.match(/\$\s*(\d+\.\d+)\s*(?:\/|\s*per\s*)kWh/i);
-  if (m) return parseFloat(m[1]) * 100;
+  if (m) return validateKwhRate(parseFloat(m[1]) * 100);
 
-  // 3. Explicit: per kWh $X.XXXX (unit before amount)
+  // 4. Explicit: per kWh $X.XXXX (unit before amount)
   m = line.match(/per\s*kWh\s*\$\s*(\d+\.\d+)/i);
-  if (m) return parseFloat(m[1]) * 100;
+  if (m) return validateKwhRate(parseFloat(m[1]) * 100);
 
-  // 4. Heuristic: dollar amount on a line that mentions kWh
+  // 5. Heuristic: dollar amount on a line that mentions kWh
   if (/kWh/i.test(line)) {
     const dollarMatches = [...line.matchAll(/\$\s*(\d+\.\d{2,4})/g)];
     for (const dm of dollarMatches) {
       const val = parseFloat(dm[1]);
-      if (val > 0 && val < 1) return val * 100; // $0.2442 → 24.42c
+      if (val > 0 && val < 1) return validateKwhRate(val * 100); // $0.2442 → 24.42c
     }
   }
 
-  // 5. Heuristic: standalone number that looks like a rate (no $ on the line)
+  // 6. Heuristic: standalone number that looks like a rate (no $ on the line)
   if (!line.includes("$")) {
     const nums = [...line.matchAll(/(\d{1,2}\.\d{1,4})/g)];
     for (const nm of nums) {
       const val = parseFloat(nm[1]);
-      if (val >= 5 && val <= 60) return val;          // Looks like cents/kWh
-      if (val > 0.05 && val < 0.60) return val * 100; // Looks like $/kWh
+      if (val >= 5 && val <= 60) return validateKwhRate(val);          // Looks like cents/kWh
+      if (val > 0.05 && val < 0.60) return validateKwhRate(val * 100); // Looks like $/kWh
     }
   }
 
@@ -168,30 +170,34 @@ function extractDailyRateFromLine(line) {
 
   // 1. Explicit: XX.XX c/day or cents/day or cents per day
   m = line.match(/(\d+\.?\d*)\s*(?:c|cents?)[\s/]*(?:per\s*)?day/i);
-  if (m) return parseFloat(m[1]);
+  if (m) return validateDailyCharge(parseFloat(m[1]));
 
-  // 2. Explicit: $X.XX/day or $X.XX per day
+  // 2. Full word: XX.XX dollars per day
+  m = line.match(/(\d+\.?\d*)\s*dollars?\s+per\s+day/i);
+  if (m) return validateDailyCharge(parseFloat(m[1]) * 100);
+
+  // 3. Explicit: $X.XX/day or $X.XX per day
   m = line.match(/\$\s*(\d+\.\d+)\s*(?:\/|\s*per\s*)day/i);
-  if (m) return parseFloat(m[1]) * 100;
+  if (m) return validateDailyCharge(parseFloat(m[1]) * 100);
 
-  // 3. Explicit: per day $X.XX (unit before amount)
+  // 4. Explicit: per day $X.XX (unit before amount)
   m = line.match(/per\s*day\s*\$\s*(\d+\.\d+)/i);
-  if (m) return parseFloat(m[1]) * 100;
+  if (m) return validateDailyCharge(parseFloat(m[1]) * 100);
 
-  // 4. Heuristic: dollar amount that looks like a daily rate ($0.30–$5.00)
+  // 5. Heuristic: dollar amount that looks like a daily rate ($0.30–$5.00)
   const dollarMatches = [...line.matchAll(/\$\s*(\d+\.\d{2,4})/g)];
   for (const dm of dollarMatches) {
     const val = parseFloat(dm[1]);
-    if (val > 0 && val < 5) return val * 100; // $2.30 → 230c
+    if (val > 0 && val < 5) return validateDailyCharge(val * 100); // $2.30 → 230c
   }
 
-  // 5. Heuristic: standalone number in daily-charge range (no $ on the line)
+  // 6. Heuristic: standalone number in daily-charge range (no $ on the line)
   if (!line.includes("$")) {
     const nums = [...line.matchAll(/(\d{1,3}\.\d{1,4})/g)];
     for (const nm of nums) {
       const val = parseFloat(nm[1]);
-      if (val >= 30 && val <= 400) return val;     // Looks like cents/day
-      if (val > 0 && val < 5) return val * 100;    // Looks like $/day
+      if (val >= 30 && val <= 400) return validateDailyCharge(val);     // Looks like cents/day
+      if (val > 0 && val < 5) return validateDailyCharge(val * 100);    // Looks like $/day
     }
   }
 
@@ -265,20 +271,26 @@ function findRateNearKeyword(text, keywords) {
     const centsMatch = nearby.match(
       /(\d+\.?\d*)\s*(?:c|cents?)[\s/]*(?:per\s*)?kWh/i,
     );
-    if (centsMatch) return parseFloat(centsMatch[1]);
+    if (centsMatch) { const v = validateKwhRate(parseFloat(centsMatch[1])); if (v !== null) return v; }
+
+    // dollars per kWh (full word)
+    const dollarsWordMatch = nearby.match(
+      /(\d+\.?\d*)\s*dollars?\s+per\s+kWh/i,
+    );
+    if (dollarsWordMatch) { const v = validateKwhRate(parseFloat(dollarsWordMatch[1]) * 100); if (v !== null) return v; }
 
     // $/kWh
     const dollarMatch = nearby.match(
       /\$\s*(\d+\.\d+)\s*(?:[/\s]*(?:per\s*)?)?kWh/i,
     );
-    if (dollarMatch) return parseFloat(dollarMatch[1]) * 100;
+    if (dollarMatch) { const v = validateKwhRate(parseFloat(dollarMatch[1]) * 100); if (v !== null) return v; }
 
     // Numeric heuristic
     const numMatch = nearby.match(/(\d{1,3}\.\d{1,4})/);
     if (numMatch) {
       const val = parseFloat(numMatch[1]);
-      if (val >= 5 && val <= 60) return val;
-      if (val > 0 && val < 1) return val * 100;
+      if (val >= 5 && val <= 60) return validateKwhRate(val);
+      if (val > 0 && val < 1) return validateKwhRate(val * 100);
     }
   }
   return null;
@@ -298,18 +310,24 @@ function findDailyChargeNearKeyword(text) {
     const centsMatch = nearby.match(
       /(\d+\.?\d*)\s*(?:c|cents?)[\s/]*(?:per\s*)?day/i,
     );
-    if (centsMatch) return parseFloat(centsMatch[1]);
+    if (centsMatch) { const v = validateDailyCharge(parseFloat(centsMatch[1])); if (v !== null) return v; }
+
+    // dollars per day (full word)
+    const dollarsWordMatch = nearby.match(
+      /(\d+\.?\d*)\s*dollars?\s+per\s+day/i,
+    );
+    if (dollarsWordMatch) { const v = validateDailyCharge(parseFloat(dollarsWordMatch[1]) * 100); if (v !== null) return v; }
 
     const dollarMatch = nearby.match(
       /\$\s*(\d+\.\d+)\s*(?:[/\s]*(?:per\s*)?)?day/i,
     );
-    if (dollarMatch) return parseFloat(dollarMatch[1]) * 100;
+    if (dollarMatch) { const v = validateDailyCharge(parseFloat(dollarMatch[1]) * 100); if (v !== null) return v; }
 
     const numMatch = nearby.match(/(\d{1,3}\.\d{1,2})/);
     if (numMatch) {
       const val = parseFloat(numMatch[1]);
-      if (val > 0 && val < 5) return val * 100;
-      if (val >= 30 && val <= 400) return val;
+      if (val > 0 && val < 5) return validateDailyCharge(val * 100);
+      if (val >= 30 && val <= 400) return validateDailyCharge(val);
     }
   }
   return null;
@@ -330,8 +348,6 @@ export async function extractTariffFromPDF(arrayBuffer) {
 
     // Fallback keyword-proximity search for any values the line scanner missed
     return {
-      retailer: findRetailer(text),
-      plan: findPlanName(text),
       dailyCharge:
         lineRates.dailyCharge ?? findDailyChargeNearKeyword(text),
       peakRate:
@@ -350,8 +366,6 @@ export async function extractTariffFromPDF(arrayBuffer) {
   } catch (err) {
     console.error("PDF parsing error:", err);
     return {
-      retailer: "",
-      plan: "",
       dailyCharge: null,
       peakRate: null,
       offPeakRate: null,

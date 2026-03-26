@@ -29,8 +29,6 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
       : [];
 
   const [tariff, setTariff] = useState({
-    retailer: source.retailer || "",
-    plan: source.plan || "",
     dailyCharge: source.dailyCharge ?? "",
     baseRate: source.baseRate ?? (extractedTariff.peakRate ?? ""),
   });
@@ -70,8 +68,6 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
 
   const handleConfirm = () => {
     onConfirm({
-      retailer: tariff.retailer,
-      plan: tariff.plan,
       dailyCharge: parseFloat(tariff.dailyCharge) || 0,
       baseRate: parseFloat(tariff.baseRate) || 0,
       touRates: touRates
@@ -125,14 +121,6 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
       )}
 
       <div className="tariff-form">
-        <div className="form-row">
-          <label>Retailer</label>
-          <input value={tariff.retailer} onChange={update("retailer")} placeholder="e.g. Mercury" />
-        </div>
-        <div className="form-row">
-          <label>Plan name</label>
-          <input value={tariff.plan} onChange={update("plan")} placeholder="e.g. Everyday" />
-        </div>
         <div className="form-row">
           <label>Daily fixed charge (cents/day)</label>
           <input type="number" value={tariff.dailyCharge} onChange={update("dailyCharge")} placeholder="e.g. 230" />
