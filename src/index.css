@@ -768,6 +768,40 @@ h3 {
   border-left: 3px solid var(--green-500);
 }
 
+.load-shifting-details {
+  margin-top: 0.75rem;
+}
+
+.load-shifting-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--green-700, #15803d);
+  user-select: none;
+}
+
+.load-shifting-details summary:hover {
+  text-decoration: underline;
+}
+
+.load-shifting-tips {
+  margin-top: 0.5rem;
+  padding-left: 0.25rem;
+}
+
+.load-shifting-tips p {
+  margin: 0 0 0.4rem;
+}
+
+.load-shifting-tips ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.load-shifting-tips li {
+  margin-bottom: 0.35rem;
+  line-height: 1.45;
+}
+
 .insight-solar {
   background: #eff6ff;
   border-left: 3px solid #3b82f6;

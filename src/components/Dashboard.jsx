@@ -246,6 +246,20 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
             {insights.map((ins, i) => (
               <li key={i} className={`insight insight-${ins.type}`}>
                 {ins.text}
+                {ins.type === "load_shifting" && (
+                  <details className="load-shifting-details">
+                    <summary>How do I shift my load?</summary>
+                    <div className="load-shifting-tips">
+                      <p>Focus load shifting on large loads only, examples include:</p>
+                      <ul>
+                        <li><strong>Hot water load</strong> — Can be done by some retailers, or you can ask your local electrician to install a timer to avoid peak times</li>
+                        <li><strong>Electric Vehicles</strong> — Schedule charging for off-peak hours using your EV's built-in timer or a smart charger</li>
+                        <li><strong>Dishwashers, Washing Machines, Dryers</strong> — Use the delay start function</li>
+                        <li><strong>Heat pumps</strong> — Some heat pumps have timers that you can set to heat the house in off-peak hours before you get home from work. Set the timer before you leave to work to come home to a cozy house.</li>
+                      </ul>
+                    </div>
+                  </details>
+                )}
                 {ins.type === "baseload" && ins.rawBaseloadW > 500 && (
                   <div className="baseload-options">
                     <p className="baseload-options-title">Do any of these apply to you?</p>
