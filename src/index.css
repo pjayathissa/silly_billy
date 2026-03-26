@@ -461,6 +461,28 @@ h3 {
   box-shadow: 0 0 0 2px rgba(255, 107, 91, 0.15);
 }
 
+/* Field-level warning and error indicators */
+.field-parse-error {
+  font-size: 0.8rem;
+  color: #d32f2f;
+  font-weight: 500;
+  margin-top: 0.15rem;
+}
+
+.field-validation-error {
+  font-size: 0.8rem;
+  color: #d32f2f;
+  font-weight: 500;
+  margin-top: 0.15rem;
+}
+
+.field-unit-warning {
+  font-size: 0.8rem;
+  color: #e65100;
+  font-weight: 500;
+  margin-top: 0.15rem;
+}
+
 .form-row-inline {
   display: flex;
   gap: 1rem;

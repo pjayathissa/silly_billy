@@ -23,6 +23,7 @@ export default function App() {
 
   const [extractedTariff, setExtractedTariff] = useState({});
   const [confirmedTariff, setConfirmedTariff] = useState(null);
+  const [pdfUploaded, setPdfUploaded] = useState(false);
 
   // Step 1 → Step 2: parse uploads and move to review
   const handleUpload = useCallback(async ({ csvContent, pdfBuffer }) => {
@@ -34,10 +35,11 @@ export default function App() {
     setNeedsCsvConfirm(csv.needsConfirmation);
 
     // Parse PDF if provided
-    let tariff = { dailyCharge: null, peakRate: null, offPeakRate: null, baseRate: null };
+    let tariff = { dailyCharge: null, peakRate: null, offPeakRate: null, baseRate: null, parseFailures: {} };
     if (pdfBuffer) {
       tariff = await extractTariffFromPDF(pdfBuffer);
     }
+    setPdfUploaded(!!pdfBuffer);
     setExtractedTariff(tariff);
 
     setStep("review");
@@ -57,6 +59,7 @@ export default function App() {
     setCsvPreview(null);
     setExtractedTariff({});
     setConfirmedTariff(null);
+    setPdfUploaded(false);
   }, []);
 
   // Navigate to a previous step via step indicator
@@ -84,6 +87,7 @@ export default function App() {
         <TariffReview
           extractedTariff={extractedTariff}
           confirmedTariff={confirmedTariff}
+          pdfUploaded={pdfUploaded}
           csvWarnings={csvWarnings}
           csvPreview={csvPreview}
           onConfirmCsv={needsCsvConfirm ? () => setNeedsCsvConfirm(false) : null}

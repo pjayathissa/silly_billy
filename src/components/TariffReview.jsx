@@ -8,12 +8,16 @@ function emptyTouRate() {
   return { rate: "", startHour: 7, endHour: 21, days: [1, 2, 3, 4, 5, 6, 0] };
 }
 
+// Thresholds for "looks like dollars instead of cents" warnings
+const DAILY_CHARGE_DOLLAR_THRESHOLD = 5;   // ≤5 likely dollars, expected ~100-300 cents
+const RATE_DOLLAR_THRESHOLD = 1;           // ≤1 likely dollars, expected ~15-45 cents
+
 /**
  * Tariff review screen — shows extracted tariff values and lets the user edit them.
- * extractedTariff: { retailer, plan, dailyCharge, peakRate, offPeakRate }
+ * extractedTariff: { retailer, plan, dailyCharge, peakRate, offPeakRate, parseFailures }
  * onConfirm(tariff): called with the confirmed/edited tariff.
  */
-export default function TariffReview({ extractedTariff, confirmedTariff, onConfirm, csvWarnings, csvPreview, onConfirmCsv }) {
+export default function TariffReview({ extractedTariff, confirmedTariff, pdfUploaded, onConfirm, csvWarnings, csvPreview, onConfirmCsv }) {
   // If user previously confirmed a tariff, use that; otherwise fall back to extracted values
   const source = confirmedTariff || extractedTariff;
 
@@ -34,9 +38,18 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
   });
 
   const [touRates, setTouRates] = useState(initialTouRates);
+  const [validationErrors, setValidationErrors] = useState({});
 
-  const update = (field) => (e) =>
+  // Parse failures from PDF extraction
+  const parseFailures = (pdfUploaded && extractedTariff.parseFailures) || {};
+
+  const update = (field) => (e) => {
     setTariff((t) => ({ ...t, [field]: e.target.value }));
+    // Clear validation error when user types
+    if (validationErrors[field]) {
+      setValidationErrors((prev) => ({ ...prev, [field]: null }));
+    }
+  };
 
   const updateTou = (index, field) => (e) => {
     setTouRates((prev) => {
@@ -44,6 +57,9 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
       next[index] = { ...next[index], [field]: e.target.value };
       return next;
     });
+    if (field === "rate" && validationErrors[`touRate_${index}`]) {
+      setValidationErrors((prev) => ({ ...prev, [`touRate_${index}`]: null }));
+    }
   };
 
   const toggleTouDay = (index, dayJs) => {
@@ -66,7 +82,42 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
   const removeTouRate = (index) =>
     setTouRates((prev) => prev.filter((_, i) => i !== index));
 
+  /** Check if a value looks like it was entered in dollars instead of cents */
+  function getUnitWarning(field, value) {
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) return null;
+    if (field === "dailyCharge" && num > 0 && num <= DAILY_CHARGE_DOLLAR_THRESHOLD) {
+      return "Looks like you've entered the value in dollars instead of cents. Please review.";
+    }
+    if ((field === "baseRate" || field === "touRate") && num > 0 && num <= RATE_DOLLAR_THRESHOLD) {
+      return "Looks like you've entered the value in dollars instead of cents. Please review.";
+    }
+    return null;
+  }
+
   const handleConfirm = () => {
+    const errors = {};
+
+    // Validate required fields are not blank
+    if (tariff.dailyCharge === "" || tariff.dailyCharge == null) {
+      errors.dailyCharge = "Data cannot be left blank.";
+    }
+    if (tariff.baseRate === "" || tariff.baseRate == null) {
+      errors.baseRate = "Data cannot be left blank.";
+    }
+
+    // Validate TOU rates that have been added
+    touRates.forEach((tou, idx) => {
+      if (tou.rate === "" || tou.rate == null) {
+        errors[`touRate_${idx}`] = "Data cannot be left blank.";
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
     onConfirm({
       dailyCharge: parseFloat(tariff.dailyCharge) || 0,
       baseRate: parseFloat(tariff.baseRate) || 0,
@@ -80,6 +131,9 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
         })),
     });
   };
+
+  const dailyUnitWarn = getUnitWarning("dailyCharge", tariff.dailyCharge);
+  const baseRateUnitWarn = getUnitWarning("baseRate", tariff.baseRate);
 
   return (
     <div className="tariff-review">
@@ -124,10 +178,28 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
         <div className="form-row">
           <label>Daily fixed charge (cents/day)</label>
           <input type="number" value={tariff.dailyCharge} onChange={update("dailyCharge")} placeholder="e.g. 230" />
+          {parseFailures.dailyCharge && (tariff.dailyCharge === "" || tariff.dailyCharge == null) && (
+            <span className="field-parse-error">* Could not extract data from the PDF. Please manually enter the daily charge.</span>
+          )}
+          {validationErrors.dailyCharge && (
+            <span className="field-validation-error">* {validationErrors.dailyCharge}</span>
+          )}
+          {dailyUnitWarn && (
+            <span className="field-unit-warning">* {dailyUnitWarn}</span>
+          )}
         </div>
         <div className="form-row">
           <label>Base rate (cents/kWh)</label>
           <input type="number" value={tariff.baseRate} onChange={update("baseRate")} placeholder="e.g. 28.5" />
+          {parseFailures.baseRate && (tariff.baseRate === "" || tariff.baseRate == null) && (
+            <span className="field-parse-error">* Could not extract data from the PDF. Please manually enter the base rate.</span>
+          )}
+          {validationErrors.baseRate && (
+            <span className="field-validation-error">* {validationErrors.baseRate}</span>
+          )}
+          {baseRateUnitWarn && (
+            <span className="field-unit-warning">* {baseRateUnitWarn}</span>
+          )}
         </div>
 
         {/* ── Time-of-Use Rates ── */}
@@ -138,72 +210,81 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
             applies to any time not covered below.
           </p>
 
-          {touRates.map((tou, idx) => (
-            <div className="tou-entry" key={idx}>
-              <div className="tou-header">
-                <span className="tou-label">Rate {idx + 1}</span>
-                <button
-                  className="tou-remove-btn"
-                  type="button"
-                  onClick={() => removeTouRate(idx)}
-                >
-                  Remove
-                </button>
-              </div>
+          {touRates.map((tou, idx) => {
+            const touUnitWarn = getUnitWarning("touRate", tou.rate);
+            return (
+              <div className="tou-entry" key={idx}>
+                <div className="tou-header">
+                  <span className="tou-label">Rate {idx + 1}</span>
+                  <button
+                    className="tou-remove-btn"
+                    type="button"
+                    onClick={() => removeTouRate(idx)}
+                  >
+                    Remove
+                  </button>
+                </div>
 
-              <div className="form-row">
-                <label>Rate (cents/kWh)</label>
-                <input
-                  type="number"
-                  value={tou.rate}
-                  onChange={updateTou(idx, "rate")}
-                  placeholder="e.g. 15"
-                />
-              </div>
-
-              <div className="form-row-inline">
-                <div>
-                  <label>Start hour (0–23)</label>
+                <div className="form-row">
+                  <label>Rate (cents/kWh)</label>
                   <input
                     type="number"
-                    min="0"
-                    max="23"
-                    value={tou.startHour}
-                    onChange={updateTou(idx, "startHour")}
+                    value={tou.rate}
+                    onChange={updateTou(idx, "rate")}
+                    placeholder="e.g. 15"
                   />
+                  {validationErrors[`touRate_${idx}`] && (
+                    <span className="field-validation-error">* {validationErrors[`touRate_${idx}`]}</span>
+                  )}
+                  {touUnitWarn && (
+                    <span className="field-unit-warning">* {touUnitWarn}</span>
+                  )}
                 </div>
-                <div>
-                  <label>End hour (0–23)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={tou.endHour}
-                    onChange={updateTou(idx, "endHour")}
-                  />
-                </div>
-              </div>
 
-              <div className="tou-days">
-                <label>Applies on:</label>
-                <div className="day-checkboxes">
-                  {DAY_LABELS.map((label, di) => {
-                    const jsDay = DAY_INDEX_TO_JS[di];
-                    return (
-                      <label key={di} className="day-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={tou.days.includes(jsDay)}
-                          onChange={() => toggleTouDay(idx, jsDay)}
-                        />
-                        {label}
-                      </label>
-                    );
-                  })}
+                <div className="form-row-inline">
+                  <div>
+                    <label>Start hour (0–23)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={tou.startHour}
+                      onChange={updateTou(idx, "startHour")}
+                    />
+                  </div>
+                  <div>
+                    <label>End hour (0–23)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={tou.endHour}
+                      onChange={updateTou(idx, "endHour")}
+                    />
+                  </div>
+                </div>
+
+                <div className="tou-days">
+                  <label>Applies on:</label>
+                  <div className="day-checkboxes">
+                    {DAY_LABELS.map((label, di) => {
+                      const jsDay = DAY_INDEX_TO_JS[di];
+                      return (
+                        <label key={di} className="day-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={tou.days.includes(jsDay)}
+                            onChange={() => toggleTouDay(idx, jsDay)}
+                          />
+                          {label}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           <button className="secondary-btn" type="button" onClick={addTouRate}>
             + Add Time of Use Rate

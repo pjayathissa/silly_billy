@@ -347,28 +347,31 @@ export async function extractTariffFromPDF(arrayBuffer) {
     const lineRates = scanLinesForRates(text);
 
     // Fallback keyword-proximity search for any values the line scanner missed
-    return {
-      dailyCharge:
-        lineRates.dailyCharge ?? findDailyChargeNearKeyword(text),
-      peakRate:
-        lineRates.peakRate ??
-        findRateNearKeyword(text, [
-          "anytime", "uncontrolled", "peak", "day rate", "unit rate",
-          "all day", "variable rate", "usage rate", "energy rate",
-        ]),
-      offPeakRate:
-        lineRates.offPeakRate ??
-        findRateNearKeyword(text, [
-          "off-peak", "off peak", "night rate", "overnight",
-          "controlled", "economy", "shoulder",
-        ]),
-    };
+    const dailyCharge = lineRates.dailyCharge ?? findDailyChargeNearKeyword(text);
+    const peakRate = lineRates.peakRate ??
+      findRateNearKeyword(text, [
+        "anytime", "uncontrolled", "peak", "day rate", "unit rate",
+        "all day", "variable rate", "usage rate", "energy rate",
+      ]);
+    const offPeakRate = lineRates.offPeakRate ??
+      findRateNearKeyword(text, [
+        "off-peak", "off peak", "night rate", "overnight",
+        "controlled", "economy", "shoulder",
+      ]);
+
+    // Track which fields could not be extracted
+    const parseFailures = {};
+    if (dailyCharge == null) parseFailures.dailyCharge = true;
+    if (peakRate == null) parseFailures.baseRate = true;
+
+    return { dailyCharge, peakRate, offPeakRate, parseFailures };
   } catch (err) {
     console.error("PDF parsing error:", err);
     return {
       dailyCharge: null,
       peakRate: null,
       offPeakRate: null,
+      parseFailures: { dailyCharge: true, baseRate: true },
     };
   }
 }
