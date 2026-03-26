@@ -102,17 +102,13 @@ function touReferenceAreas(touRates) {
 export default function Dashboard({ data, currentTariff }) {
   const [expandedRow, setExpandedRow] = useState(null);
   const [nightEv, setNightEv] = useState(false);
-  const [evPowerW, setEvPowerW] = useState(2000);
   const [nightHotWater, setNightHotWater] = useState(false);
   const [nightBattery, setNightBattery] = useState(false);
-  const [batteryPowerW, setBatteryPowerW] = useState(2000);
 
   const nightLoadOptions = {
     ev: nightEv,
-    evPowerW,
     hotWater: nightHotWater,
     battery: nightBattery,
-    batteryPowerW,
   };
 
   const profile = dailyProfile(data);
@@ -258,23 +254,6 @@ export default function Dashboard({ data, currentTariff }) {
                       <input type="checkbox" checked={nightEv} onChange={(e) => setNightEv(e.target.checked)} />
                       I have an EV which I charge overnight
                     </label>
-                    {nightEv && (
-                      <div className="baseload-followup">
-                        <p className="followup-label">What is the EV charger power?</p>
-                        <label className="baseload-radio">
-                          <input type="radio" name="evPower" checked={evPowerW === 2000} onChange={() => setEvPowerW(2000)} />
-                          Plug into the wall max 10A (2kW)
-                        </label>
-                        <label className="baseload-radio">
-                          <input type="radio" name="evPower" checked={evPowerW === 7000} onChange={() => setEvPowerW(7000)} />
-                          Fast charger (7kW)
-                        </label>
-                        <label className="baseload-radio">
-                          <input type="radio" name="evPower" checked={evPowerW === 10000} onChange={() => setEvPowerW(10000)} />
-                          Greater than 7kW
-                        </label>
-                      </div>
-                    )}
 
                     <label className="baseload-checkbox">
                       <input type="checkbox" checked={nightHotWater} onChange={(e) => setNightHotWater(e.target.checked)} />
@@ -285,21 +264,9 @@ export default function Dashboard({ data, currentTariff }) {
                       <input type="checkbox" checked={nightBattery} onChange={(e) => setNightBattery(e.target.checked)} />
                       I have a battery that charges at night
                     </label>
-                    {nightBattery && (
-                      <div className="baseload-followup">
-                        <p className="followup-label">What is your battery charge rate?</p>
-                        <div className="battery-slider">
-                          <input
-                            type="range"
-                            min={1000}
-                            max={5000}
-                            step={500}
-                            value={batteryPowerW}
-                            onChange={(e) => setBatteryPowerW(Number(e.target.value))}
-                          />
-                          <span className="slider-value">{(batteryPowerW / 1000).toFixed(1)} kW</span>
-                        </div>
-                      </div>
+
+                    {(nightEv || nightHotWater || nightBattery) && !ins.isHighBaseload && (
+                      <p className="baseload-resolved">After factoring in these loads, the nighttime baseload looks normal.</p>
                     )}
                   </div>
                 )}

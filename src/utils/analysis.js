@@ -111,11 +111,11 @@ export function generateInsights(data, currentTariff, nightLoadOptions = {}) {
     : 0;
   const nightBaseloadW = Math.round(avgNightKwh * 2 * 1000); // Convert half-hourly kWh to watts
 
-  // Subtract known night loads from the baseload
+  // Subtract known night loads from the baseload (diversity-adjusted averages)
   let knownLoadW = 0;
-  if (nightLoadOptions.ev) knownLoadW += nightLoadOptions.evPowerW || 2000;
-  if (nightLoadOptions.hotWater) knownLoadW += 2000;
-  if (nightLoadOptions.battery) knownLoadW += nightLoadOptions.batteryPowerW || 2000;
+  if (nightLoadOptions.ev) knownLoadW += 1000;        // ~1kW avg accounts for not charging every night
+  if (nightLoadOptions.hotWater) knownLoadW += 500;    // ~0.5kW avg for timer-controlled HWC
+  if (nightLoadOptions.battery) knownLoadW += 2000;    // ~2kW typical home battery charge rate
 
   const adjustedBaseloadW = Math.max(0, nightBaseloadW - knownLoadW);
   const hasKnownLoads = knownLoadW > 0;
