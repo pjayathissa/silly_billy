@@ -1,4 +1,4 @@
-# Energy Bill Analyst
+# Silly Billy
 
 A React app that analyses NZ residential electricity consumption data and recommends the best power plan.
 

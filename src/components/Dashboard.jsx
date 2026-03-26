@@ -9,6 +9,7 @@ import {
   generateInsights, currentAnnualCost, rankPlans,
 } from "../utils/analysis.js";
 import { tariffsLastUpdated } from "../tariffs.js";
+import StepIndicator from "./StepIndicator.jsx";
 
 // Palette of semi-transparent colours for TOU background bands
 const TOU_COLORS = [
@@ -122,212 +123,218 @@ export default function Dashboard({ data, currentTariff }) {
 
   return (
     <div className="dashboard">
-      <h2>Analysis Dashboard</h2>
-
-      <p className="summary">
-        Data covers {data.length.toLocaleString()} readings.
-        Your estimated annual cost on your current plan:{" "}
-        <strong>${myCost.toLocaleString()}</strong>
-      </p>
-
-      {/* ── Average Daily Profile ── */}
-      <section className="chart-section">
-        <h3>Average Daily Consumption Profile</h3>
-        <p className="chart-desc">Average kWh per half-hour interval across the full dataset.</p>
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={profile}>
-            <CartesianGrid strokeDasharray="3 3" />
-            {touAreas}
-            <XAxis dataKey="hour" tickFormatter={(v, i) => tickFilter(v, i) ? v : ""} />
-            <YAxis unit=" kWh" />
-            <Tooltip />
-            <Area type="monotone" dataKey="kwh" stroke="#3b82f6" fill="#93c5fd" name="Avg kWh" />
-          </AreaChart>
-        </ResponsiveContainer>
-        {currentTariff.touRates && currentTariff.touRates.length > 0 && (
-          <div className="tou-legend">
-            {currentTariff.touRates.map((tou, idx) => (
-              <span key={idx} className="tou-legend-item">
-                <span
-                  className="tou-legend-swatch"
-                  style={{ background: TOU_STROKE_COLORS[idx % TOU_STROKE_COLORS.length] }}
-                />
-                {tou.rate}c/kWh ({tou.startHour}:00–{tou.endHour}:00,{" "}
-                {tou.days.length === 7
-                  ? "all days"
-                  : tou.days.map((d) => DAY_NAMES[d]).join(", ")}
-                )
-              </span>
-            ))}
-            <span className="tou-legend-item">
-              <span className="tou-legend-swatch" style={{ background: "#94a3b8" }} />
-              Base rate: {currentTariff.baseRate}c/kWh
-            </span>
-          </div>
-        )}
-      </section>
-
-      {/* ── Seasonal Comparison ── */}
-      <section className="chart-section">
-        <h3>Summer vs Winter Profile</h3>
-        <p className="chart-desc">Average daily shape by season — highlights heating impact.</p>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={seasonalMerged}>
-            <CartesianGrid strokeDasharray="3 3" />
-            {touAreas}
-            <XAxis dataKey="hour" tickFormatter={(v, i) => tickFilter(v, i) ? v : ""} />
-            <YAxis unit=" kWh" />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="summer" stroke="#f59e0b" name="Summer" dot={false} />
-            <Line type="monotone" dataKey="winter" stroke="#3b82f6" name="Winter" dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-        {currentTariff.touRates && currentTariff.touRates.length > 0 && (
-          <div className="tou-legend">
-            {currentTariff.touRates.map((tou, idx) => (
-              <span key={idx} className="tou-legend-item">
-                <span
-                  className="tou-legend-swatch"
-                  style={{ background: TOU_STROKE_COLORS[idx % TOU_STROKE_COLORS.length] }}
-                />
-                {tou.rate}c/kWh ({tou.startHour}:00–{tou.endHour}:00,{" "}
-                {tou.days.length === 7
-                  ? "all days"
-                  : tou.days.map((d) => DAY_NAMES[d]).join(", ")}
-                )
-              </span>
-            ))}
-            <span className="tou-legend-item">
-              <span className="tou-legend-swatch" style={{ background: "#94a3b8" }} />
-              Base rate: {currentTariff.baseRate}c/kWh
-            </span>
-          </div>
-        )}
-      </section>
-
-      {/* ── Weekly Trend ── */}
-      <section className="chart-section">
-        <h3>Weekly Consumption Trend</h3>
-        <p className="chart-desc">Total kWh per week — shows trends and anomalies over time.</p>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={weekly}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-              dataKey="week"
-              tickFormatter={(v) => {
-                const d = new Date(v);
-                return d.toLocaleDateString("en-NZ", { day: "numeric", month: "short" });
-              }}
-            />
-            <YAxis unit=" kWh" />
-            <Tooltip />
-            <Bar dataKey="kwh" fill="#6366f1" name="Weekly kWh" />
-          </BarChart>
-        </ResponsiveContainer>
-      </section>
-
-      {/* ── Insights ── */}
-      <section className="insights-section">
-        <h3>Insights</h3>
-        <ul className="insights-list">
-          {insights.map((ins, i) => (
-            <li key={i} className={`insight insight-${ins.type}`}>
-              {ins.text}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* ── Plan Comparison Table ── */}
-      <section className="plans-section">
-        <h3>Plan Recommendations</h3>
-        <p className="data-note" style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.25rem" }}>
-          Data based on AI web search on {tariffsLastUpdated}. The data does not
-          take into account regional price differences, and may contain errors.
-          Please check the actual data on the retailer's website.
+      <div className="dash-header">
+        <h2>Analysis Dashboard</h2>
+        <p className="dash-subtitle">
+          {data.length.toLocaleString()} readings analysed.
+          Estimated annual cost: <strong>${myCost.toLocaleString()}</strong>
         </p>
-        <p className="chart-desc">
-          Ranked by estimated annual cost using your actual consumption data.
-          Assumes no change in usage behaviour.
-        </p>
-        {plans.length > 0 && !plans.some(p => p.saving > 0) && (
-          <p className="no-savings-note" style={{ color: "#b45309", fontWeight: 500, marginBottom: "0.5rem" }}>
-            There is no known plan that would save you money from your current plan.
+        <StepIndicator currentStep="dashboard" />
+      </div>
+
+      <div className="dash-content">
+        {/* ── Average Daily Profile ── */}
+        <section className="chart-section card-coral">
+          <h3>Average Daily Consumption Profile</h3>
+          <p className="chart-desc">Average kWh per half-hour interval across the full dataset.</p>
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={profile}>
+              <CartesianGrid strokeDasharray="3 3" />
+              {touAreas}
+              <XAxis dataKey="hour" tickFormatter={(v, i) => tickFilter(v, i) ? v : ""} />
+              <YAxis unit=" kWh" />
+              <Tooltip />
+              <Area type="monotone" dataKey="kwh" stroke="#ff6b5b" fill="#ffc9c2" name="Avg kWh" />
+            </AreaChart>
+          </ResponsiveContainer>
+          {currentTariff.touRates && currentTariff.touRates.length > 0 && (
+            <div className="tou-legend">
+              {currentTariff.touRates.map((tou, idx) => (
+                <span key={idx} className="tou-legend-item">
+                  <span
+                    className="tou-legend-swatch"
+                    style={{ background: TOU_STROKE_COLORS[idx % TOU_STROKE_COLORS.length] }}
+                  />
+                  {tou.rate}c/kWh ({tou.startHour}:00–{tou.endHour}:00,{" "}
+                  {tou.days.length === 7
+                    ? "all days"
+                    : tou.days.map((d) => DAY_NAMES[d]).join(", ")}
+                  )
+                </span>
+              ))}
+              <span className="tou-legend-item">
+                <span className="tou-legend-swatch" style={{ background: "#94a3b8" }} />
+                Base rate: {currentTariff.baseRate}c/kWh
+              </span>
+            </div>
+          )}
+        </section>
+
+        {/* ── Seasonal Comparison ── */}
+        <section className="chart-section card-coral">
+          <h3>Summer vs Winter Profile</h3>
+          <p className="chart-desc">Average daily shape by season — highlights heating impact.</p>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={seasonalMerged}>
+              <CartesianGrid strokeDasharray="3 3" />
+              {touAreas}
+              <XAxis dataKey="hour" tickFormatter={(v, i) => tickFilter(v, i) ? v : ""} />
+              <YAxis unit=" kWh" />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="summer" stroke="#ff8a7a" name="Summer" dot={false} />
+              <Line type="monotone" dataKey="winter" stroke="#3b82f6" name="Winter" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+          {currentTariff.touRates && currentTariff.touRates.length > 0 && (
+            <div className="tou-legend">
+              {currentTariff.touRates.map((tou, idx) => (
+                <span key={idx} className="tou-legend-item">
+                  <span
+                    className="tou-legend-swatch"
+                    style={{ background: TOU_STROKE_COLORS[idx % TOU_STROKE_COLORS.length] }}
+                  />
+                  {tou.rate}c/kWh ({tou.startHour}:00–{tou.endHour}:00,{" "}
+                  {tou.days.length === 7
+                    ? "all days"
+                    : tou.days.map((d) => DAY_NAMES[d]).join(", ")}
+                  )
+                </span>
+              ))}
+              <span className="tou-legend-item">
+                <span className="tou-legend-swatch" style={{ background: "#94a3b8" }} />
+                Base rate: {currentTariff.baseRate}c/kWh
+              </span>
+            </div>
+          )}
+        </section>
+
+        {/* ── Weekly Trend ── */}
+        <section className="chart-section card-coral">
+          <h3>Weekly Consumption Trend</h3>
+          <p className="chart-desc">Total kWh per week — shows trends and anomalies over time.</p>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={weekly}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="week"
+                tickFormatter={(v) => {
+                  const d = new Date(v);
+                  return d.toLocaleDateString("en-NZ", { day: "numeric", month: "short" });
+                }}
+              />
+              <YAxis unit=" kWh" />
+              <Tooltip />
+              <Bar dataKey="kwh" fill="#ff6b5b" name="Weekly kWh" />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+
+        {/* ── Insights ── */}
+        <section className="insights-section card-coral">
+          <h3>Insights</h3>
+          <ul className="insights-list">
+            {insights.map((ins, i) => (
+              <li key={i} className={`insight insight-${ins.type}`}>
+                {ins.text}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* ── Plan Comparison Table ── */}
+        <section className="plans-section card-coral">
+          <h3>Plan Recommendations</h3>
+          <p className="data-note" style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.25rem" }}>
+            Data based on AI web search on {tariffsLastUpdated}. The data does not
+            take into account regional price differences, and may contain errors.
+            Please check the actual data on the retailer's website.
           </p>
-        )}
-        <div className="table-wrapper">
-          <table className="plans-table">
-            <thead>
-              <tr>
-                <th>Retailer</th>
-                <th>Plan</th>
-                <th>Type</th>
-                <th>Est. Annual Cost</th>
-                <th>Annual Saving</th>
-                <th>Features</th>
-              </tr>
-            </thead>
-            <tbody>
-              {plans.map((p, i) => {
-                const isExpanded = expandedRow === i;
-                return (
-                  <>
-                    <tr
-                      key={i}
-                      className={`${p.saving > 0 ? "saving" : "no-saving"} expandable-row`}
-                      onClick={() => setExpandedRow(isExpanded ? null : i)}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <td>{p.retailer}</td>
-                      <td>{p.plan}</td>
-                      <td>{p.type}</td>
-                      <td>${p.estimatedCost.toLocaleString()}</td>
-                      <td className={p.saving > 0 ? "positive" : "negative"}>
-                        {p.saving > 0 ? `$${p.saving.toLocaleString()}` : `−$${Math.abs(p.saving).toLocaleString()}`}
-                      </td>
-                      <td>{p.features}</td>
-                    </tr>
-                    {isExpanded && (
-                      <tr key={`${i}-detail`} className="plan-detail-row">
-                        <td colSpan={6}>
-                          <div className="plan-detail">
-                            <p className="plan-detail-disclaimer">
-                              These are estimated prices from automated web searches and may not
-                              reflect current rates. Please verify with {p.retailer}'s website
-                              before making any decisions.
-                            </p>
-                            <div className="plan-detail-grid">
-                              <div className="plan-detail-item">
-                                <span className="plan-detail-label">Daily charge</span>
-                                <span className="plan-detail-value">{(p.dailyCharge / 100).toFixed(2)} $/day</span>
-                              </div>
-                              {p.rates.map((r, ri) => (
-                                <div key={ri} className="plan-detail-item">
-                                  <span className="plan-detail-label">{r.name}</span>
-                                  <span className="plan-detail-value">
-                                    {r.centsPerKwh} c/kWh
-                                    {r.startHour != null && r.endHour != null && (
-                                      <> &middot; {String(r.startHour).padStart(2, "0")}:00–{String(r.endHour).padStart(2, "0")}:00</>
-                                    )}
-                                    {r.daysOfWeek && (
-                                      <> &middot; {r.daysOfWeek.map(d => DAY_NAMES[d]).join(", ")}</>
-                                    )}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+          <p className="chart-desc">
+            Ranked by estimated annual cost using your actual consumption data.
+          </p>
+          {plans.length > 0 && !plans.some(p => p.saving > 0) && (
+            <p className="no-savings-note" style={{ color: "#b45309", fontWeight: 500, marginBottom: "0.5rem" }}>
+              There is no known plan that would save you money from your current plan.
+            </p>
+          )}
+          <div className="table-wrapper">
+            <table className="plans-table">
+              <thead>
+                <tr>
+                  <th>Retailer</th>
+                  <th>Plan</th>
+                  <th>Type</th>
+                  <th>Est. Annual Cost</th>
+                  <th>Saving</th>
+                  <th>Features</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plans.map((p, i) => {
+                  const isExpanded = expandedRow === i;
+                  return (
+                    <>
+                      <tr
+                        key={i}
+                        className={`${p.saving > 0 ? "saving" : "no-saving"} expandable-row`}
+                        onClick={() => setExpandedRow(isExpanded ? null : i)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <td className="retailer">{p.retailer}</td>
+                        <td>{p.plan}</td>
+                        <td>{p.type}</td>
+                        <td>${p.estimatedCost.toLocaleString()}</td>
+                        <td>
+                          {p.saving > 0 ? (
+                            <span className="saving-badge save">${p.saving.toLocaleString()}</span>
+                          ) : (
+                            <span className="saving-badge no-save">-${Math.abs(p.saving).toLocaleString()}</span>
+                          )}
                         </td>
+                        <td>{p.features}</td>
                       </tr>
-                    )}
-                  </>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                      {isExpanded && (
+                        <tr key={`${i}-detail`} className="plan-detail-row">
+                          <td colSpan={6}>
+                            <div className="plan-detail">
+                              <p className="plan-detail-disclaimer">
+                                These are estimated prices from automated web searches and may not
+                                reflect current rates. Please verify with {p.retailer}'s website
+                                before making any decisions.
+                              </p>
+                              <div className="plan-detail-grid">
+                                <div className="plan-detail-item">
+                                  <span className="plan-detail-label">Daily charge</span>
+                                  <span className="plan-detail-value">{(p.dailyCharge / 100).toFixed(2)} $/day</span>
+                                </div>
+                                {p.rates.map((r, ri) => (
+                                  <div key={ri} className="plan-detail-item">
+                                    <span className="plan-detail-label">{r.name}</span>
+                                    <span className="plan-detail-value">
+                                      {r.centsPerKwh} c/kWh
+                                      {r.startHour != null && r.endHour != null && (
+                                        <> &middot; {String(r.startHour).padStart(2, "0")}:00–{String(r.endHour).padStart(2, "0")}:00</>
+                                      )}
+                                      {r.daysOfWeek && (
+                                        <> &middot; {r.daysOfWeek.map(d => DAY_NAMES[d]).join(", ")}</>
+                                      )}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
