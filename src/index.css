@@ -226,7 +226,7 @@ h3 {
 .hero {
   text-align: center;
   padding: 2.5rem 0 1.5rem;
-  background: #fff;
+  background: transparent;
 }
 
 .hero-icon {
