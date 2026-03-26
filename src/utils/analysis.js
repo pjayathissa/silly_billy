@@ -47,7 +47,7 @@ export function dailyProfile(data) {
   return buckets.map((b, i) => ({
     slot: i,
     hour: `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 === 0 ? "00" : "30"}`,
-    kwh: b.count > 0 ? Math.round((b.total / b.count) * 1000) / 1000 : 0,
+    kwh: b.count > 0 ? Math.round((b.total / b.count) * 2 * 1000) / 1000 : 0,
   }));
 }
 
@@ -72,7 +72,7 @@ export function seasonalProfiles(data) {
     buckets.map((b, i) => ({
       slot: i,
       hour: `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 === 0 ? "00" : "30"}`,
-      kwh: b.count > 0 ? Math.round((b.total / b.count) * 1000) / 1000 : 0,
+      kwh: b.count > 0 ? Math.round((b.total / b.count) * 2 * 1000) / 1000 : 0,
     }));
 
   return { summer: format(summer), winter: format(winter) };

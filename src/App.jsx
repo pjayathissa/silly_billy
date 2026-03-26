@@ -59,9 +59,18 @@ export default function App() {
     setConfirmedTariff(null);
   }, []);
 
+  // Navigate to a previous step via step indicator
+  const handleStepClick = useCallback((stepId) => {
+    if (stepId === "upload") {
+      handleReset();
+    } else {
+      setStep(stepId);
+    }
+  }, [handleReset]);
+
   return (
     <div className="app">
-      {step !== "dashboard" && <StepIndicator currentStep={step} />}
+      {step !== "dashboard" && <StepIndicator currentStep={step} onStepClick={handleStepClick} />}
 
       {step !== "upload" && (
         <button className="reset-btn" onClick={handleReset}>
@@ -82,7 +91,7 @@ export default function App() {
       )}
 
       {step === "dashboard" && consumptionData && confirmedTariff && (
-        <Dashboard data={consumptionData} currentTariff={confirmedTariff} />
+        <Dashboard data={consumptionData} currentTariff={confirmedTariff} onStepClick={handleStepClick} />
       )}
     </div>
   );

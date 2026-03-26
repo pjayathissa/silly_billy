@@ -99,7 +99,7 @@ function touReferenceAreas(touRates) {
 /**
  * Main analysis dashboard — charts, insights, and plan comparison table.
  */
-export default function Dashboard({ data, currentTariff }) {
+export default function Dashboard({ data, currentTariff, onStepClick }) {
   const [expandedRow, setExpandedRow] = useState(null);
   const [nightEv, setNightEv] = useState(false);
   const [nightHotWater, setNightHotWater] = useState(false);
@@ -138,22 +138,22 @@ export default function Dashboard({ data, currentTariff }) {
           {data.length.toLocaleString()} readings analysed.
           Estimated annual cost: <strong>${myCost.toLocaleString()}</strong>
         </p>
-        <StepIndicator currentStep="dashboard" />
+        <StepIndicator currentStep="dashboard" onStepClick={onStepClick} />
       </div>
 
       <div className="dash-content">
         {/* ── Average Daily Profile ── */}
         <section className="chart-section card-coral">
           <h3>Average Daily Consumption Profile</h3>
-          <p className="chart-desc">Average kWh per half-hour interval across the full dataset.</p>
+          <p className="chart-desc">Average kWh/h across the full dataset.</p>
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={profile}>
               <CartesianGrid strokeDasharray="3 3" />
               {touAreas}
               <XAxis dataKey="hour" tickFormatter={(v, i) => tickFilter(v, i) ? v : ""} />
-              <YAxis unit=" kWh" />
+              <YAxis unit=" kWh/h" />
               <Tooltip />
-              <Area type="monotone" dataKey="kwh" stroke="#ff6b5b" fill="#ffc9c2" name="Avg kWh" />
+              <Area type="monotone" dataKey="kwh" stroke="#ff6b5b" fill="#ffc9c2" name="Avg kWh/h" />
             </AreaChart>
           </ResponsiveContainer>
           {currentTariff.touRates && currentTariff.touRates.length > 0 && (
@@ -188,11 +188,11 @@ export default function Dashboard({ data, currentTariff }) {
               <CartesianGrid strokeDasharray="3 3" />
               {touAreas}
               <XAxis dataKey="hour" tickFormatter={(v, i) => tickFilter(v, i) ? v : ""} />
-              <YAxis unit=" kWh" />
+              <YAxis unit=" kWh/h" />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="summer" stroke="#ff8a7a" name="Summer" dot={false} />
-              <Line type="monotone" dataKey="winter" stroke="#3b82f6" name="Winter" dot={false} />
+              <Line type="monotone" dataKey="summer" stroke="#ff8a7a" name="Summer (kWh/h)" dot={false} />
+              <Line type="monotone" dataKey="winter" stroke="#3b82f6" name="Winter (kWh/h)" dot={false} />
             </LineChart>
           </ResponsiveContainer>
           {currentTariff.touRates && currentTariff.touRates.length > 0 && (
@@ -246,6 +246,20 @@ export default function Dashboard({ data, currentTariff }) {
             {insights.map((ins, i) => (
               <li key={i} className={`insight insight-${ins.type}`}>
                 {ins.text}
+                {ins.type === "load_shifting" && (
+                  <details className="load-shifting-details">
+                    <summary>How do I shift my load?</summary>
+                    <div className="load-shifting-tips">
+                      <p>Focus load shifting on large loads only, examples include:</p>
+                      <ul>
+                        <li><strong>Hot water load</strong> — Can be done by some retailers, or you can ask your local electrician to install a timer to avoid peak times</li>
+                        <li><strong>Electric Vehicles</strong> — Schedule charging for off-peak hours using your EV's built-in timer or a smart charger</li>
+                        <li><strong>Dishwashers, Washing Machines, Dryers</strong> — Use the delay start function</li>
+                        <li><strong>Heat pumps</strong> — Some heat pumps have timers that you can set to heat the house in off-peak hours before you get home from work. Set the timer before you leave to work to come home to a cozy house.</li>
+                      </ul>
+                    </div>
+                  </details>
+                )}
                 {ins.type === "baseload" && ins.rawBaseloadW > 500 && (
                   <div className="baseload-options">
                     <p className="baseload-options-title">Do any of these apply to you?</p>
