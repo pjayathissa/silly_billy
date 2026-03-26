@@ -755,14 +755,86 @@ h3 {
   border-left: 3px solid var(--green-500);
 }
 
-.insight-ev {
-  background: #f5f3ff;
-  border-left: 3px solid #8b5cf6;
-}
-
 .insight-solar {
   background: #eff6ff;
   border-left: 3px solid #3b82f6;
+}
+
+/* ── Baseload Options ────────────────────────────────── */
+.baseload-options {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.baseload-options-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  color: #374151;
+}
+
+.baseload-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+.baseload-checkbox input[type="checkbox"] {
+  accent-color: var(--coral-500);
+  width: 16px;
+  height: 16px;
+}
+
+.baseload-followup {
+  margin-left: 1.5rem;
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.followup-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.35rem;
+}
+
+.baseload-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0.15rem 0;
+}
+
+.baseload-radio input[type="radio"] {
+  accent-color: var(--coral-500);
+}
+
+.battery-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.battery-slider input[type="range"] {
+  flex: 1;
+  accent-color: var(--coral-500);
+}
+
+.slider-value {
+  font-weight: 600;
+  font-size: 0.85rem;
+  min-width: 3rem;
+  color: var(--coral-600);
 }
 
 /* ── Plan Comparison Table ────────────────────────────── */
