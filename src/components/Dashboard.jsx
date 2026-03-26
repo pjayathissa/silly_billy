@@ -268,6 +268,9 @@ export default function Dashboard({ data, currentTariff }) {
                     {(nightEv || nightHotWater || nightBattery) && !ins.isHighBaseload && (
                       <p className="baseload-resolved">After factoring in these loads, the nighttime baseload looks normal.</p>
                     )}
+                    {(nightEv || nightHotWater || nightBattery) && ins.isHighBaseload && (
+                      <p className="baseload-still-high">After factoring in these loads, the nighttime baseload still looks higher than usual (~{(ins.adjustedBaseloadW / 1000).toFixed(1)} kW). Common culprits are fridges, freezers, hot water cylinders, pools, spas, and leaking hot water pipes.</p>
+                    )}
                   </div>
                 )}
               </li>

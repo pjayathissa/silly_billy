@@ -139,6 +139,7 @@ export function generateInsights(data, currentTariff, nightLoadOptions = {}) {
     type: "baseload",
     isHighBaseload: hasKnownLoads ? isHighAdjusted : isHighRaw,
     rawBaseloadW: nightBaseloadW,
+    adjustedBaseloadW,
     text: baseloadText,
   });
 
