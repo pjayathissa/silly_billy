@@ -83,6 +83,7 @@ export default function App() {
       {step === "review" && (
         <TariffReview
           extractedTariff={extractedTariff}
+          confirmedTariff={confirmedTariff}
           csvWarnings={csvWarnings}
           csvPreview={csvPreview}
           onConfirmCsv={needsCsvConfirm ? () => setNeedsCsvConfirm(false) : null}

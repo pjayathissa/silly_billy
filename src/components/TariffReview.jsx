@@ -13,18 +13,26 @@ function emptyTouRate() {
  * extractedTariff: { retailer, plan, dailyCharge, peakRate, offPeakRate }
  * onConfirm(tariff): called with the confirmed/edited tariff.
  */
-export default function TariffReview({ extractedTariff, onConfirm, csvWarnings, csvPreview, onConfirmCsv }) {
-  // Migrate old off-peak into a TOU rate entry if present
-  const initialTouRates =
-    extractedTariff.offPeakRate
+export default function TariffReview({ extractedTariff, confirmedTariff, onConfirm, csvWarnings, csvPreview, onConfirmCsv }) {
+  // If user previously confirmed a tariff, use that; otherwise fall back to extracted values
+  const source = confirmedTariff || extractedTariff;
+
+  const initialTouRates = confirmedTariff
+    ? (confirmedTariff.touRates || []).map((t) => ({
+        rate: t.rate ?? "",
+        startHour: t.startHour ?? 7,
+        endHour: t.endHour ?? 21,
+        days: t.days || [1, 2, 3, 4, 5, 6, 0],
+      }))
+    : extractedTariff.offPeakRate
       ? [{ rate: extractedTariff.offPeakRate, startHour: 21, endHour: 7, days: [1, 2, 3, 4, 5, 6, 0] }]
       : [];
 
   const [tariff, setTariff] = useState({
-    retailer: extractedTariff.retailer || "",
-    plan: extractedTariff.plan || "",
-    dailyCharge: extractedTariff.dailyCharge ?? "",
-    baseRate: extractedTariff.peakRate ?? "",
+    retailer: source.retailer || "",
+    plan: source.plan || "",
+    dailyCharge: source.dailyCharge ?? "",
+    baseRate: source.baseRate ?? (extractedTariff.peakRate ?? ""),
   });
 
   const [touRates, setTouRates] = useState(initialTouRates);
