@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import UploadScreen from "./components/UploadScreen.jsx";
 import TariffReview from "./components/TariffReview.jsx";
 import Dashboard from "./components/Dashboard.jsx";
+import StepIndicator from "./components/StepIndicator.jsx";
 import { parseCSV } from "./utils/csvParser.js";
 import { extractTariffFromPDF } from "./utils/pdfParser.js";
 
@@ -60,9 +61,11 @@ export default function App() {
 
   return (
     <div className="app">
+      {step !== "dashboard" && <StepIndicator currentStep={step} />}
+
       {step !== "upload" && (
         <button className="reset-btn" onClick={handleReset}>
-          ← Start over
+          Start over
         </button>
       )}
 
