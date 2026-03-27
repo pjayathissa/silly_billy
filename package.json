@@ -1,6 +1,6 @@
 {
-  "name": "silly-billy",
-  "private": true,
+  "name": "energy-bill-analyst",
+  "license": "MIT",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
