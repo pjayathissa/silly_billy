@@ -1,4 +1,4 @@
-# Energy Bill Analyst
+# Silly Billy
 
 A browser-based tool that analyses New Zealand residential electricity consumption data and recommends the cheapest power plan. Upload your smart meter data (CSV) and optionally your current bill (PDF), and the app ranks 25+ plans from 11 NZ retailers by estimated annual cost using your actual usage profile.
 
