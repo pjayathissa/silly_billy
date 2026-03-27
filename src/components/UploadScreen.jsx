@@ -10,6 +10,7 @@ export default function UploadScreen({ onUpload }) {
   const [dataFile, setDataFile] = useState(null);
   const [pdfFile, setPdfFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
   const handleSubmit = useCallback(async () => {
     if (!dataFile) return;
@@ -49,6 +50,25 @@ export default function UploadScreen({ onUpload }) {
         </div>
         <h1>Silly Billy</h1>
         <p className="hero-tagline">Analyse your actual electricity data.</p>
+        <div className="privacy-label">
+          <button
+            className="privacy-badge"
+            onClick={() => setPrivacyExpanded((v) => !v)}
+            aria-expanded={privacyExpanded}
+          >
+            <svg className="privacy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Your data is private and stays on your device{" "}
+            <span className="privacy-more">({privacyExpanded ? "less info" : "more info"})</span>
+          </button>
+          {privacyExpanded && (
+            <p className="privacy-detail">
+              Silly Billy is an application that runs entirely on your device.
+              The spreadsheets and PDF&apos;s that you upload do not leave your
+              device, and therefore don&apos;t touch any server or database. The
+              data you provide is not used for any training purposes.
+            </p>
+          )}
+        </div>
       </div>
 
       <ol className="steps-list">
