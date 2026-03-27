@@ -1032,13 +1032,34 @@ h3 {
 /* ── Footer ───────────────────────────────────────────── */
 .site-footer {
   margin-top: 3rem;
-  padding: 1.25rem;
+  padding: 1rem 1.5rem;
   background: var(--navy-800);
   color: #fff;
-  text-align: center;
-  font-size: 1rem;
-  font-weight: 700;
-  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  font-size: 0.85rem;
+  font-weight: 400;
+  border-radius: 0;
+  /* break out of #root max-width to span full viewport */
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+}
+
+.site-footer a.footer-link {
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+}
+
+.site-footer a.footer-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.site-footer .footer-brand {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* ── Responsive ───────────────────────────────────────── */
