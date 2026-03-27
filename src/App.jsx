@@ -94,6 +94,8 @@ export default function App() {
       {step === "dashboard" && consumptionData && confirmedTariff && (
         <Dashboard data={consumptionData} currentTariff={confirmedTariff} onStepClick={handleStepClick} />
       )}
+
+      <footer className="site-footer">Silly Billy</footer>
     </div>
   );
 }

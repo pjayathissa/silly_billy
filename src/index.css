@@ -1029,6 +1029,18 @@ h3 {
   color: var(--grey-800);
 }
 
+/* ── Footer ───────────────────────────────────────────── */
+.site-footer {
+  margin-top: 3rem;
+  padding: 1.25rem;
+  background: var(--navy-800);
+  color: #fff;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+}
+
 /* ── Responsive ───────────────────────────────────────── */
 @media (max-width: 640px) {
   #root {
