@@ -63,7 +63,7 @@ const tariffs = [
     dailyCharge: 173,
     rates: [{ name: "Anytime", centsPerKwh: 33.3 }],
     features: "Low-user flat rate (LFC regulation being phased out — daily charge rising annually)",
-  }
+  },
 
   // ── Meridian ─────────────────────────────────────────────
   // Note: Meridian acquired Flick Electric (May 2025) and Powershop customers.
@@ -150,22 +150,7 @@ const tariffs = [
 
 
   // ── Contact Energy ───────────────────────────────────────
-  {
-    retailer: "Contact",
-    plan: "Basic",
-    type: "standard",
-    dailyCharge: 240,
-    rates: [{ name: "Anytime", centsPerKwh: 32.0 }],
-    features: "Simple flat rate, broadband bundle available",
-  },
-  {
-    retailer: "Contact",
-    plan: "Basic",
-    type: "low",
-    dailyCharge: 173,
-    rates: [{ name: "Anytime", centsPerKwh: 37.8 }],
-    features: "Low-user flat rate (LFC regulation being phased out — daily charge rising annually)",
-  },
+
   {
     retailer: "Contact",
     plan: "Good Nights",
