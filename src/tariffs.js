@@ -50,10 +50,10 @@ const tariffs = [
   // DPP4 increases and subsequent retail adjustments.
   {
     retailer: "Mercury",
-    plan: "Everyday Rates",
+    plan: "Open Term",
     type: "standard",
-    dailyCharge: 269,
-    rates: [{ name: "Anytime", centsPerKwh: 32.0 }],
+    dailyCharge: 335,
+    rates: [{ name: "Anytime", centsPerKwh: 25.9 }],
     features: "Simple flat rate, no peak/off-peak, no fixed term",
   },
   {
@@ -61,49 +61,34 @@ const tariffs = [
     plan: "Everyday Rates",
     type: "low",
     dailyCharge: 173,
-    rates: [{ name: "Anytime", centsPerKwh: 38.0 }],
+    rates: [{ name: "Anytime", centsPerKwh: 33.3 }],
     features: "Low-user flat rate (LFC regulation being phased out — daily charge rising annually)",
-  },
-  {
-    retailer: "Mercury",
-    plan: "Time of Use",
-    type: "standard",
-    dailyCharge: 269,
-    rates: [
-      { name: "Peak", centsPerKwh: 43.0, startHour: 7, endHour: 21 },
-      { name: "Off-peak", centsPerKwh: 19.0, startHour: 21, endHour: 7 },
-    ],
-    features: "Cheaper nights (9pm–7am)",
-  },
+  }
 
   // ── Meridian ─────────────────────────────────────────────
   // Note: Meridian acquired Flick Electric (May 2025) and Powershop customers.
   // Plan formerly known as "Simple", rebranded to "Freedom" (also called "Simple Flexi Plan").
   // Rates updated to reflect post-DPP4 levels.
+  
   {
     retailer: "Meridian",
     plan: "Freedom",
     type: "standard",
-    dailyCharge: 245,
-    rates: [{ name: "Anytime", centsPerKwh: 31.5 }],
-    features: "Flat rate, no contract, no break fees",
+    dailyCharge: 288,
+    rates: [
+      { name: "Day", centsPerKwh: 27.55, startHour: 7, endHour: 21 },
+      { name: "Night", centsPerKwh: 24.22, startHour: 21, endHour: 7 },
+    ],
+    features: "Cheaper nights (9pm–7am)",
   },
   {
     retailer: "Meridian",
     plan: "Freedom",
     type: "low",
-    dailyCharge: 173,
-    rates: [{ name: "Anytime", centsPerKwh: 37.5 }],
-    features: "Low-user flat rate (LFC regulation being phased out — daily charge rising annually)",
-  },
-  {
-    retailer: "Meridian",
-    plan: "Freedom Time of Use",
-    type: "standard",
-    dailyCharge: 245,
+    dailyCharge: 207,
     rates: [
-      { name: "Peak", centsPerKwh: 42.5, startHour: 7, endHour: 21 },
-      { name: "Off-peak", centsPerKwh: 18.0, startHour: 21, endHour: 7 },
+      { name: "Day", centsPerKwh: 31.25, startHour: 7, endHour: 21 },
+      { name: "Night", centsPerKwh: 27.91, startHour: 21, endHour: 7 },
     ],
     features: "Cheaper nights (9pm–7am)",
   },
@@ -112,28 +97,57 @@ const tariffs = [
   // Note: Genesis absorbed Frank Energy customers (August 2025).
   {
     retailer: "Genesis",
-    plan: "Energy Basic",
+    plan: "Power Home",
     type: "standard",
-    dailyCharge: 252,
-    rates: [{ name: "Anytime", centsPerKwh: 32.5 }],
+    dailyCharge: 273,
+    rates: [{ name: "Anytime", centsPerKwh: 27.9 }],
     features: "No frills flat rate",
   },
   {
     retailer: "Genesis",
-    plan: "Energy Basic",
+    plan: "Power Home",
     type: "low",
-    dailyCharge: 173,
-    rates: [{ name: "Anytime", centsPerKwh: 38.5 }],
+    dailyCharge: 167,
+    rates: [{ name: "Anytime", centsPerKwh: 32.6 }],
     features: "Low-user flat rate (LFC regulation being phased out — daily charge rising annually)",
   },
   {
     retailer: "Genesis",
-    plan: "Energy Plus",
+    plan: "EVHome",
     type: "standard",
-    dailyCharge: 269,
-    rates: [{ name: "Anytime", centsPerKwh: 31.0 }],
+    dailyCharge: 283,
+    rates: [
+      // Free period: 9am–5pm Saturday and Sunday only.
+      {
+        name: "Night",
+        centsPerKwh: 16.8,
+        startHour: 21,
+        endHour: 7,
+        daysOfWeek: [0, 6],
+      },
+      { name: "Day", centsPerKwh: 33.6 },
+    ],
+    features: "Dual fuel discount available",
+  }, 
+  {
+    retailer: "Genesis",
+    plan: "EVHome",
+    type: "low",
+    dailyCharge: 167,
+    rates: [
+      // Free period: 9am–5pm Saturday and Sunday only.
+      {
+        name: "Night",
+        centsPerKwh: 19.41,
+        startHour: 21,
+        endHour: 7,
+        daysOfWeek: [0, 6],
+      },
+      { name: "Day", centsPerKwh: 38.9 },
+    ],
     features: "Dual fuel discount available",
   },
+
 
   // ── Contact Energy ───────────────────────────────────────
   {

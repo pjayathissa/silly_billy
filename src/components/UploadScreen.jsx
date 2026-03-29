@@ -49,7 +49,7 @@ export default function UploadScreen({ onUpload }) {
           <svg width="36" height="36" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="24" fill="#ff6b6b"/><circle cx="17" cy="22" r="10" fill="#ffffff" stroke="#1a2d4a" strokeWidth="1.5"/><circle cx="20" cy="19" r="5" fill="#1a2d4a"/><circle cx="22" cy="17" r="1.8" fill="#ffffff"/><circle cx="33" cy="24" r="8" fill="#ffffff" stroke="#1a2d4a" strokeWidth="1.5"/><circle cx="30" cy="26" r="4" fill="#1a2d4a"/><circle cx="31" cy="25" r="1.4" fill="#ffffff"/></svg>
         </div>
         <h1>Silly Billy</h1>
-        <p className="hero-tagline">Analyse your actual electricity data.</p>
+        <p className="hero-tagline">Analyse your electricity data.</p>
         <div className="privacy-label">
           <button
             className="privacy-badge"
@@ -72,7 +72,7 @@ export default function UploadScreen({ onUpload }) {
       </div>
 
       <ol className="steps-list">
-        <li>Request 12 months electricity data from your retailer in CSV or Excel format</li>
+        <li>Request half hourly electricity data from your retailer in CSV or Excel format</li>
         <li>Upload the file below</li>
         <li>Optional — upload a PDF copy of your bill to auto-detect your current plan</li>
       </ol>
