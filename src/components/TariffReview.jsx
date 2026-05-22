@@ -35,6 +35,17 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
 
   const [touRates, setTouRates] = useState(initialTouRates);
 
+  // Solar export (buy-back) rate, autofilled by the PDF parser when found.
+  const initialExportRate =
+    (confirmedTariff && confirmedTariff.solarExportRate != null
+      ? confirmedTariff.solarExportRate
+      : extractedTariff.solarExportRate) ?? "";
+  const [solarExportRate, setSolarExportRate] = useState(initialExportRate);
+  // Show the field expanded if a rate was detected or previously entered.
+  const [showSolarExport, setShowSolarExport] = useState(
+    initialExportRate !== "" && initialExportRate != null
+  );
+
   const update = (field) => (e) =>
     setTariff((t) => ({ ...t, [field]: e.target.value }));
 
@@ -67,6 +78,10 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
     setTouRates((prev) => prev.filter((_, i) => i !== index));
 
   const handleConfirm = () => {
+    const exportRate =
+      showSolarExport && solarExportRate !== "" && solarExportRate != null
+        ? parseFloat(solarExportRate) || 0
+        : null;
     onConfirm({
       dailyCharge: parseFloat(tariff.dailyCharge) || 0,
       baseRate: parseFloat(tariff.baseRate) || 0,
@@ -78,6 +93,7 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
           endHour: parseInt(t.endHour) || 0,
           days: t.days,
         })),
+      solarExportRate: exportRate,
     });
   };
 
@@ -208,6 +224,46 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
           <button className="secondary-btn" type="button" onClick={addTouRate}>
             + Add Time of Use Rate
           </button>
+        </div>
+
+        {/* ── Solar export (buy-back) rate ── */}
+        <div className="solar-export-section">
+          <h3>Solar Export</h3>
+          {showSolarExport ? (
+            <>
+              <p className="tou-hint">
+                The rate your retailer pays for electricity you export to the
+                grid (cents/kWh). Used to assess solar and battery economics.
+              </p>
+              <div className="form-row">
+                <label>Solar export rate (cents/kWh)</label>
+                <input
+                  type="number"
+                  value={solarExportRate}
+                  onChange={(e) => setSolarExportRate(e.target.value)}
+                  placeholder="e.g. 12.5"
+                />
+              </div>
+              <button
+                className="tou-remove-btn"
+                type="button"
+                onClick={() => {
+                  setShowSolarExport(false);
+                  setSolarExportRate("");
+                }}
+              >
+                Remove
+              </button>
+            </>
+          ) : (
+            <button
+              className="secondary-btn"
+              type="button"
+              onClick={() => setShowSolarExport(true)}
+            >
+              + Add solar export rate
+            </button>
+          )}
         </div>
       </div>
 

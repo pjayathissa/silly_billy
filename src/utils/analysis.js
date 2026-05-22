@@ -24,11 +24,6 @@ function weekKey(d) {
   return start.toISOString().slice(0, 10);
 }
 
-/** Format a date as "DD Mon YYYY". */
-function formatDate(d) {
-  return d.toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" });
-}
-
 // ─── Average Daily Profile ──────────────────────────────────
 
 /**

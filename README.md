@@ -8,6 +8,8 @@ A browser-based tool that analyses New Zealand residential electricity consumpti
 - **PDF Bill Parsing** — Extracts your current tariff details (daily charge, peak/off-peak rates) from uploaded electricity bills using pdf.js with line-aware text reconstruction.
 - **Consumption Analysis** — Average daily profile (48 half-hour slots), summer vs winter comparison, and weekly trends.
 - **Smart Insights** — Nighttime baseload detection, seasonal heating cost estimates, usage spike alerts, solar pattern recognition, and load-shifting savings opportunities.
+- **Solar Export & Battery ROI** — Captures two-way energy flows (a dedicated export column or negative readings), reads a solar export/buy-back rate from your bill, and models the discounted payback of an 8 kWh battery that time-shifts daytime export to your after-sunset load.
+- **Solar Installation ROI** — For households without solar, models 5 / 8.5 / 10 kW systems against your actual usage using average NZ generation, ranks them by discounted payback, suggests load-shifting where it would tip the economics, and tests whether adding a battery improves the case.
 - **Plan Comparison** — Ranks plans from Mercury, Meridian, Genesis, Contact, Electric Kiwi, Octopus, Nova, Pulse, and Powershop by estimated annual cost, accounting for time-of-use rates, day-of-week restrictions, and free-power windows.
 
 ## Getting Started
@@ -72,6 +74,15 @@ Auto-detects and normalises half-hourly electricity data from multiple CSV forma
 #### `src/utils/pdfParser.js` — PDF Tariff Extractor
 
 Extracts tariff rates from electricity bill PDFs using pdf.js. Uses Y-coordinate grouping to reconstruct table rows, then applies keyword-based line classification (daily charge, peak, off-peak) with rate extraction. Falls back to keyword-proximity search for values the line scanner misses.
+
+#### `src/utils/solar.js` — Solar & Battery Economics
+
+Two ROI models for two-way energy flows:
+
+- `batteryROI(data, tariff)` — for households **already exporting** solar. Simulates an 8 kWh battery day-by-day: it charges from each day's export and discharges against after-sunset load (with leftover charge carried to the next day). The saving on each shifted kWh is the gap between the grid buy rate at the time of use and the export rate forgone. Skips when export data covers only one season; otherwise annualises and returns a discounted payback and a recommend / consider / uneconomic verdict.
+- `solarROI(data, tariff)` — for households **without** solar. Models 5 / 8.5 / 10 kW systems from average NZ sun-hours, compares generation to actual half-hourly load (self-consumption vs export), ranks scenarios by discounted payback, estimates the load-shift needed to reach a 10-year payback, and runs `batteryROI` on the modelled post-solar profile to test battery pairing.
+
+Financial and physical assumptions (5% discount rate, NZ sun-hours by month, installed capex per system size, battery cost) are named constants at the top of the file with a `SOLAR_DATA_LAST_UPDATED` marker. As with `tariffs.js`, these are representative figures — verify against quotes for your roof and location.
 
 #### `src/utils/excelParser.js` — Excel Converter
 

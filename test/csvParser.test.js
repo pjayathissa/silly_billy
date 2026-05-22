@@ -473,7 +473,7 @@ describe("parseCSV — edge cases", () => {
     expect(result.data).toHaveLength(0);
   });
 
-  it("ignores rows with negative kWh values", () => {
+  it("treats negative kWh values as solar export", () => {
     const rows = [];
     rows.push("timestamp,kwh");
     // Need at least 10 rows for the parser to proceed
@@ -482,8 +482,29 @@ describe("parseCSV — edge cases", () => {
       rows.push(`2025-03-03 ${h}:00:00,${i === 5 ? -0.5 : 0.3}`);
     }
     const result = parseCSV(rows.join("\n"));
-    // The negative row should be excluded
+    // Import is never negative; the negative reading becomes export instead.
     expect(result.data.every((d) => d.kwh >= 0)).toBe(true);
-    expect(result.data.length).toBe(11); // 12 - 1 negative
+    expect(result.data.length).toBe(12); // negative row is kept as export
+    const exportRow = result.data.find((d) => d.exportKwh > 0);
+    expect(exportRow).toBeDefined();
+    expect(exportRow.kwh).toBe(0);
+    expect(exportRow.exportKwh).toBeCloseTo(0.5, 5);
+  });
+
+  it("reads a dedicated export column alongside consumption", () => {
+    const rows = [];
+    rows.push("timestamp,kwh,export_kwh");
+    for (let i = 0; i < 12; i++) {
+      const h = String(i).padStart(2, "0");
+      // Midday rows export, others only import
+      const exp = i >= 10 && i <= 14 ? 0.8 : 0;
+      rows.push(`2025-03-03 ${h}:00:00,0.3,${exp}`);
+    }
+    const result = parseCSV(rows.join("\n"));
+    expect(result.data.length).toBe(12);
+    const exporting = result.data.filter((d) => d.exportKwh > 0);
+    expect(exporting.length).toBe(2); // hours 10, 11 (within loop range)
+    expect(exporting[0].kwh).toBeCloseTo(0.3, 5);
+    expect(exporting[0].exportKwh).toBeCloseTo(0.8, 5);
   });
 });
