@@ -11,6 +11,13 @@
  *
  * All readings are { timestamp: Date, kwh: number, exportKwh: number }.
  * Monetary maths is done in cents and converted to dollars at the boundary.
+ *
+ * Generation and cost constants (researched May 2026) are NZ market averages
+ * for modelling only — verify against quotes for a specific site. Sources:
+ *   - Peak sun hours / daily curve: GridFree (NIWA SolarView-derived)
+ *   - Yield per kW: Solar Scout (PVGIS), My Solar Quotes
+ *   - Solar capex: My Solar Quotes, EECA, Solar Republic
+ *   - Battery capex: Solar Scout, Electrify the Hutt, Tesla NZ
  */
 
 import { matchesTou } from "./analysis.js";
@@ -234,47 +241,53 @@ export function batteryROI(data, tariff, opts = {}) {
 // daylight window with a half-sine curve peaking at solar noon. Figures are NZ
 // averages; see SOLAR_DATA_LAST_UPDATED and the disclaimer surfaced in the UI.
 
-// Sourced figures — see PR description for citations.
+// Sourced figures — see PR description for citations (researched May 2026
+// from GridFree/NIWA SolarView, Solar Scout/PVGIS, My Solar Quotes, EECA).
 export const SOLAR_DATA_LAST_UPDATED = "May 2026";
 
 // Effective kWh generated per kW of installed panels per day, by month (Jan–Dec).
-// Annual sum ≈ NZ average yield per installed kW (~1300 kWh/kW/yr).
+// Derived from Auckland-representative peak-sun-hours (NIWA-based) scaled by a
+// ~0.87 performance ratio for system losses. Annual sum ≈ 1,350 kWh/kW/yr,
+// in line with NZ regional figures (Auckland 1,391 / Wellington 1,431 /
+// Christchurch 1,340 kWh/kW/yr). Intermediate months are interpolated.
 const NZ_KWH_PER_KW_DAY = [
-  5.0, // Jan (high summer)
-  4.5, // Feb
-  3.8, // Mar
-  3.0, // Apr
-  2.2, // May
-  1.8, // Jun (low winter)
-  2.0, // Jul
-  2.7, // Aug
-  3.5, // Sep
-  4.2, // Oct
-  4.7, // Nov
-  5.0, // Dec
+  4.87, // Jan (high summer)
+  4.61, // Feb
+  3.92, // Mar
+  3.13, // Apr
+  2.52, // May
+  2.26, // Jun (low winter)
+  2.44, // Jul
+  2.96, // Aug
+  3.65, // Sep
+  4.26, // Oct
+  4.70, // Nov
+  5.13, // Dec
 ];
 
 // Daylight generation window in local clock time [startHour, endHour] by month.
+// NZ: summer ~06:00–20:30, winter ~08:00–17:00 (interpolated between).
 const NZ_DAYLIGHT = [
-  [6.0, 20.8], // Jan
-  [6.7, 20.2], // Feb
-  [7.2, 19.3], // Mar
-  [7.0, 17.9], // Apr
-  [7.5, 17.2], // May
-  [7.8, 17.0], // Jun
-  [7.7, 17.2], // Jul
-  [7.1, 17.7], // Aug
-  [6.4, 18.3], // Sep
-  [6.4, 19.7], // Oct
-  [5.8, 20.3], // Nov
-  [5.8, 20.7], // Dec
+  [6.0, 20.5], // Jan
+  [6.4, 20.0], // Feb
+  [7.0, 19.2], // Mar
+  [7.3, 18.0], // Apr
+  [7.6, 17.3], // May
+  [8.0, 17.0], // Jun
+  [7.9, 17.1], // Jul
+  [7.4, 17.6], // Aug
+  [6.8, 18.4], // Sep
+  [6.3, 19.6], // Oct
+  [5.9, 20.2], // Nov
+  [5.8, 20.5], // Dec
 ];
 
-// Installed (turn-key) capex in NZD by system size. Researched NZ figures.
+// Installed (turn-key, incl. GST) capex in NZD by system size, 2025/26 NZ
+// market midpoints (~$1,700–2,300/kW; larger systems cost less per kW).
 export const SOLAR_SCENARIOS = [
   { sizeKw: 5, capex: 11000, label: "5 kW" },
-  { sizeKw: 8.5, capex: 16000, label: "8.5 kW" },
-  { sizeKw: 10, capex: 18500, label: "10 kW" },
+  { sizeKw: 8.5, capex: 16500, label: "8.5 kW" },
+  { sizeKw: 10, capex: 17500, label: "10 kW" },
 ];
 
 /**
