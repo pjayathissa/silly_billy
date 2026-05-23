@@ -22,14 +22,17 @@
 
 import { matchesTou } from "./analysis.js";
 
-// Dev-only flag. While true the UI surfaces an internal-calculations card so
-// the underlying maths can be verified against real data. Set to false before
-// shipping to production to hide that card.
-export const DEV_MODE = true;
-
 // ─── Shared financial assumptions ───────────────────────────
 // Real discount rate used for the time-value-of-money payback.
 export const DISCOUNT_RATE = 0.05;
+
+// ─── Loan assumptions (breakdown card) ──────────────────────
+// Default bank-loan interest rate offered when financing a system, and the
+// "green loan" intro deal common in NZ: 1% for the first three years, then the
+// floating rate afterwards.
+export const DEFAULT_LOAN_RATE = 0.05;
+export const GREEN_LOAN_INTRO_RATE = 0.01;
+export const GREEN_LOAN_INTRO_YEARS = 3;
 // Horizon (years) over which we look for a discounted payback before giving up.
 const PAYBACK_HORIZON_YEARS = 40;
 
@@ -322,63 +325,10 @@ function generationForReading(timestamp, sizeKw) {
   return sizeKw * dailyPerKw * MONTH_WEIGHTS[m][slot];
 }
 
-// Days per month (Jan–Dec) for turning a daily generation figure into a
-// monthly total. Feb uses 28 — close enough for modelling.
-const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
-
-/**
- * Build the dev-only internal-calculations breakdown for the chosen scenario,
- * so the maths can be sanity-checked against the source constants:
- *   - self-consumption saving vs export earning (annualised, from `best`)
- *   - modelled generation per month and per average day of that month, taken
- *     straight from NZ_KWH_PER_KW_DAY × system size (independent of data span)
- *   - value eroded by discounting/inflation: nominal cumulative savings over
- *     the payback period vs their present value (which equals the capex).
- */
-function buildSolarDebug(best) {
-  const sizeKw = best.sizeKw;
-  const months = MONTH_NAMES.map((name, m) => {
-    const avgDailyKwh = sizeKw * NZ_KWH_PER_KW_DAY[m];
-    return {
-      month: name,
-      kwhPerKwDay: NZ_KWH_PER_KW_DAY[m],
-      avgDailyKwh,
-      monthlyKwh: avgDailyKwh * DAYS_IN_MONTH[m],
-    };
-  });
-  const annualGenerationKwh = months.reduce((s, x) => s + x.monthlyKwh, 0);
-
-  // Discounting/inflation erosion over the payback period. By the definition of
-  // discounted payback the present value of savings at payback ≈ the capex, so
-  // the gap to the nominal sum is what time-value-of-money (inflation) erodes.
-  let inflation = null;
-  if (best.paybackYears != null) {
-    const nominalCumulative = best.annualSaving * best.paybackYears;
-    const presentValue = best.capex;
-    inflation = {
-      paybackYears: best.paybackYears,
-      annualSaving: best.annualSaving,
-      nominalCumulative,
-      presentValue,
-      lostToDiscounting: nominalCumulative - presentValue,
-    };
-  }
-
-  return {
-    sizeKw,
-    label: best.label,
-    selfConsumptionSaving: best.selfConsumptionSaving,
-    exportEarning: best.exportEarning,
-    months,
-    annualGenerationKwh,
-    inflation,
-  };
-}
 
 /** Annuity factor: present value of $1/year for `years` years at `rate`. */
 function annuityFactor(years, rate = DISCOUNT_RATE) {
@@ -418,16 +368,12 @@ function evaluateScenario(data, tariff, scenario, annualScale) {
     synthetic.push({ timestamp: r.timestamp, kwh: residualLoad, exportKwh: exported });
   }
 
-  const selfConsumptionSaving = (selfCents / 100) * annualScale;
-  const exportEarning = (exportCents / 100) * annualScale;
-  const annualSaving = selfConsumptionSaving + exportEarning;
+  const annualSaving = ((selfCents + exportCents) / 100) * annualScale;
   const paybackYears = discountedPayback(scenario.capex, annualSaving);
 
   return {
     ...scenario,
     annualSaving,
-    selfConsumptionSaving,
-    exportEarning,
     annualGenerationKwh: genKwh * annualScale,
     annualSurplusKwh: surplusKwh * annualScale,
     paybackYears,
@@ -531,6 +477,121 @@ export function solarROI(data, tariff) {
     loadShift,
     battery: battery.applicable ? battery : null,
     combined,
-    debug: DEV_MODE ? buildSolarDebug(best) : null,
+  };
+}
+
+// ─── Detailed breakdown (UI "Solar Maths Breakdown" card) ───
+//
+// Models a single, user-customisable system size/cost against the actual load,
+// broken down per calendar month, and presents the financing as a tangible
+// bank loan rather than an abstract discount rate.
+
+/**
+ * Years to fully repay `principal` when serviced by a fixed `annualRepayment`,
+ * with the outstanding balance accruing interest at `rateForYear(year)`.
+ * The accounting identity (total repaid − principal = total interest) holds for
+ * any rate schedule, so total interest is derived from the fractional term.
+ * Returns { repaid: false } if the repayment never clears the balance.
+ */
+function loanTerm(principal, annualRepayment, rateForYear, maxYears = 60) {
+  if (annualRepayment <= 0) {
+    return { repaid: false, years: null, totalInterest: null };
+  }
+  let balance = principal;
+  for (let y = 1; y <= maxYears; y++) {
+    const accrued = balance * (1 + rateForYear(y));
+    if (accrued <= annualRepayment) {
+      const years = y - 1 + accrued / annualRepayment;
+      return { repaid: true, years, totalInterest: annualRepayment * years - principal };
+    }
+    balance = accrued - annualRepayment;
+  }
+  return { repaid: false, years: null, totalInterest: null };
+}
+
+/**
+ * Per-month, per-average-day breakdown of generation, consumption, solar self-
+ * consumption and export for a given system size against the user's actual
+ * load, plus a bank-loan view of the economics.
+ *
+ * opts: { sizeKw, capex, interestRate (decimal), greenLoan (bool) }.
+ * Note that for every reading self-consumption + export equals generation, so
+ * the per-day self and export columns always sum to the generation column.
+ */
+export function solarBreakdown(data, tariff, opts = {}) {
+  if (!data || data.length === 0) return null;
+
+  const sizeKw = opts.sizeKw;
+  const capex = opts.capex;
+  const floatingRate = opts.interestRate ?? DEFAULT_LOAN_RATE;
+  const greenLoan = !!opts.greenLoan;
+  const exportRate = tariff.solarExportRate || 0;
+
+  const span = spanDays(data);
+  const annualScale = 365 / span;
+
+  const genSum = new Array(12).fill(0);
+  const loadSum = new Array(12).fill(0);
+  const selfSum = new Array(12).fill(0);
+  const exportSum = new Array(12).fill(0);
+  const dayKeys = Array.from({ length: 12 }, () => new Set());
+
+  let selfCents = 0;
+  let exportCents = 0;
+
+  for (const r of data) {
+    const m = r.timestamp.getMonth();
+    const load = r.kwh || 0;
+    const gen = generationForReading(r.timestamp, sizeKw);
+    const selfConsumed = Math.min(gen, load);
+    const exported = Math.max(0, gen - load);
+
+    genSum[m] += gen;
+    loadSum[m] += load;
+    selfSum[m] += selfConsumed;
+    exportSum[m] += exported;
+    dayKeys[m].add(dateKey(r.timestamp));
+
+    selfCents += selfConsumed * gridRateForReading(r.timestamp, tariff);
+    exportCents += exported * exportRate;
+  }
+
+  const months = MONTH_NAMES.map((name, m) => {
+    const days = dayKeys[m].size;
+    const div = days > 0 ? days : 1;
+    return {
+      month: name,
+      daysObserved: days,
+      avgDailyGenerationKwh: genSum[m] / div,
+      avgDailyConsumptionKwh: loadSum[m] / div,
+      avgDailySelfKwh: selfSum[m] / div,
+      avgDailyExportKwh: exportSum[m] / div,
+    };
+  });
+
+  const selfConsumptionSaving = (selfCents / 100) * annualScale;
+  const exportEarning = (exportCents / 100) * annualScale;
+  const annualSaving = selfConsumptionSaving + exportEarning;
+  const annualGenerationKwh = genSum.reduce((a, b) => a + b, 0) * annualScale;
+
+  const rateForYear = greenLoan
+    ? (y) => (y <= GREEN_LOAN_INTRO_YEARS ? GREEN_LOAN_INTRO_RATE : floatingRate)
+    : () => floatingRate;
+  const loan = {
+    ...loanTerm(capex, annualSaving, rateForYear),
+    floatingRate,
+    greenLoan,
+    annualRepayment: annualSaving,
+  };
+
+  return {
+    sizeKw,
+    capex,
+    selfConsumptionSaving,
+    exportEarning,
+    annualSaving,
+    annualGenerationKwh,
+    months,
+    loan,
   };
 }

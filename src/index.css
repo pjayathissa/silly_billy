@@ -925,6 +925,44 @@ h3 {
   padding: 1.5rem;
 }
 
+.solar-customise {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  background: var(--coral-50);
+  border-radius: var(--radius-sm);
+}
+
+.solar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--grey-700);
+}
+
+.solar-field input[type="number"] {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--grey-200);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  width: 9rem;
+}
+
+.solar-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 22rem;
+  line-height: 1.4;
+}
+
+.solar-field-checkbox input {
+  flex: none;
+}
+
 .solar-stats {
   display: flex;
   flex-wrap: wrap;
