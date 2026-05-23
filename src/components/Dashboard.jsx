@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -8,7 +8,7 @@ import {
   dailyProfile, seasonalProfiles, weeklyTrend,
   generateInsights, currentAnnualCost, rankPlans,
 } from "../utils/analysis.js";
-import { batteryROI, solarROI, DISCOUNT_RATE, DEV_MODE } from "../utils/solar.js";
+import { batteryROI, solarROI, solarBreakdown, DISCOUNT_RATE, DEFAULT_LOAN_RATE, GREEN_LOAN_INTRO_RATE, GREEN_LOAN_INTRO_YEARS } from "../utils/solar.js";
 import { tariffsLastUpdated } from "../tariffs.js";
 import StepIndicator from "./StepIndicator.jsx";
 
@@ -126,6 +126,26 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
   const hasSolar = totalExportKwh > 1;
   const battery = hasSolar ? batteryROI(data, currentTariff) : null;
   const solar = hasSolar ? null : solarROI(data, currentTariff);
+
+  // Customisable inputs for the detailed breakdown card. Empty string means
+  // "use the recommended default" (best scenario size/cost, default loan rate).
+  const [sizeInput, setSizeInput] = useState("");
+  const [capexInput, setCapexInput] = useState("");
+  const [rateInput, setRateInput] = useState("");
+  const [greenLoan, setGreenLoan] = useState(false);
+
+  const breakdownSizeKw = sizeInput !== "" ? Number(sizeInput) : solar?.best?.sizeKw;
+  const breakdownCapex = capexInput !== "" ? Number(capexInput) : solar?.best?.capex;
+  const breakdownRate = rateInput !== "" ? Number(rateInput) / 100 : DEFAULT_LOAN_RATE;
+  const breakdown = useMemo(() => {
+    if (!solar || !solar.applicable) return null;
+    return solarBreakdown(data, currentTariff, {
+      sizeKw: breakdownSizeKw,
+      capex: breakdownCapex,
+      interestRate: breakdownRate,
+      greenLoan,
+    });
+  }, [solar, data, currentTariff, breakdownSizeKw, breakdownCapex, breakdownRate, greenLoan]);
 
   // Merge seasonal data for the overlay chart
   const seasonalMerged = profile.map((_, i) => ({
@@ -423,68 +443,119 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
           </section>
         )}
 
-        {/* ── DEV ONLY: Solar internal calculations (set DEV_MODE=false to hide) ── */}
-        {DEV_MODE && solar && solar.applicable && solar.debug && (
+        {/* ── Solar Maths Breakdown ── */}
+        {solar && solar.applicable && breakdown && (
           <section className="solar-section card-coral">
-            <h3>🛠️ Solar Maths Breakdown (dev only)</h3>
-            <p className="data-note" style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.5rem" }}>
-              Internal calculations for the best scenario ({solar.debug.label}),
-              shown so the figures can be verified. This card is hidden in
-              production (DEV_MODE = false).
+            <h3>Solar Maths Breakdown</h3>
+            <p className="chart-desc">
+              How the numbers above are built up, for a {breakdown.sizeKw} kW system
+              costing ${breakdown.capex.toLocaleString()}, modelled against your actual
+              half-hourly usage. Adjust the assumptions below to match a real quote.
             </p>
+
+            <div className="solar-customise">
+              <label className="solar-field">
+                <span>Solar system size (kW)</span>
+                <input
+                  type="number" min="0" step="0.5" inputMode="decimal"
+                  value={sizeInput} placeholder={String(solar.best.sizeKw)}
+                  onChange={(e) => setSizeInput(e.target.value)}
+                />
+              </label>
+              <label className="solar-field">
+                <span>System cost ($)</span>
+                <input
+                  type="number" min="0" step="500" inputMode="numeric"
+                  value={capexInput} placeholder={String(solar.best.capex)}
+                  onChange={(e) => setCapexInput(e.target.value)}
+                />
+              </label>
+              <label className="solar-field">
+                <span>Loan interest rate (%)</span>
+                <input
+                  type="number" min="0" step="0.1" inputMode="decimal"
+                  value={rateInput} placeholder={String(Math.round(DEFAULT_LOAN_RATE * 100))}
+                  onChange={(e) => setRateInput(e.target.value)}
+                />
+              </label>
+              <label className="solar-field solar-field-checkbox">
+                <input
+                  type="checkbox" checked={greenLoan}
+                  onChange={(e) => setGreenLoan(e.target.checked)}
+                />
+                <span>Green loan ({Math.round(GREEN_LOAN_INTRO_RATE * 100)}% for the
+                  first {GREEN_LOAN_INTRO_YEARS} years, then floating)</span>
+              </label>
+            </div>
 
             <div className="solar-stats">
               <div className="solar-stat">
                 <span className="solar-stat-label">Saving from self-consumption</span>
-                <span className="solar-stat-value">${Math.round(solar.debug.selfConsumptionSaving).toLocaleString()}/yr</span>
+                <span className="solar-stat-value">${Math.round(breakdown.selfConsumptionSaving).toLocaleString()}/yr</span>
               </div>
               <div className="solar-stat">
                 <span className="solar-stat-label">Earnings from export</span>
-                <span className="solar-stat-value">${Math.round(solar.debug.exportEarning).toLocaleString()}/yr</span>
+                <span className="solar-stat-value">${Math.round(breakdown.exportEarning).toLocaleString()}/yr</span>
               </div>
               <div className="solar-stat">
                 <span className="solar-stat-label">Total annual saving</span>
-                <span className="solar-stat-value">${Math.round(solar.debug.selfConsumptionSaving + solar.debug.exportEarning).toLocaleString()}/yr</span>
+                <span className="solar-stat-value">${Math.round(breakdown.annualSaving).toLocaleString()}/yr</span>
               </div>
               <div className="solar-stat">
                 <span className="solar-stat-label">Modelled annual generation</span>
-                <span className="solar-stat-value">{Math.round(solar.debug.annualGenerationKwh).toLocaleString()} kWh</span>
+                <span className="solar-stat-value">{Math.round(breakdown.annualGenerationKwh).toLocaleString()} kWh</span>
               </div>
             </div>
 
-            {solar.debug.inflation && (
-              <>
-                <h4 style={{ margin: "1rem 0 0.25rem" }}>Value lost to discounting / inflation</h4>
-                <p className="chart-desc" style={{ marginTop: 0 }}>
-                  Over the {solar.debug.inflation.paybackYears.toFixed(1)}-year payback you save
-                  ${Math.round(solar.debug.inflation.nominalCumulative).toLocaleString()} in nominal dollars,
-                  but at the {Math.round(DISCOUNT_RATE * 100)}% real discount rate those savings are only
-                  worth ${Math.round(solar.debug.inflation.presentValue).toLocaleString()} today (≈ the
-                  install cost). The difference,
-                  ${Math.round(solar.debug.inflation.lostToDiscounting).toLocaleString()}, is eroded by
-                  the time-value of money.
-                </p>
-              </>
-            )}
+            <h4 style={{ margin: "1rem 0 0.25rem" }}>Financing with a bank loan</h4>
+            <p className="chart-desc" style={{ marginTop: 0 }}>
+              {breakdown.loan.repaid ? (
+                <>
+                  Borrowing the ${breakdown.capex.toLocaleString()} on top of your mortgage
+                  {breakdown.loan.greenLoan
+                    ? ` at ${Math.round(GREEN_LOAN_INTRO_RATE * 100)}% for ${GREEN_LOAN_INTRO_YEARS} years then ${(breakdown.loan.floatingRate * 100).toFixed(1)}% floating`
+                    : ` at ${(breakdown.loan.floatingRate * 100).toFixed(1)}%`}
+                  , your ${Math.round(breakdown.annualSaving).toLocaleString()}/yr of savings
+                  pay it off in about {breakdown.loan.years.toFixed(1)} years.
+                  Total interest paid: ${Math.round(breakdown.loan.totalInterest).toLocaleString()}.
+                </>
+              ) : (
+                <>
+                  At {breakdown.loan.greenLoan
+                    ? `${Math.round(GREEN_LOAN_INTRO_RATE * 100)}% then ${(breakdown.loan.floatingRate * 100).toFixed(1)}% floating`
+                    : `${(breakdown.loan.floatingRate * 100).toFixed(1)}%`}
+                  , the ${Math.round(breakdown.annualSaving).toLocaleString()}/yr of savings don't
+                  cover the interest on a ${breakdown.capex.toLocaleString()} loan, so it never
+                  pays itself off — a lower rate or cheaper system is needed.
+                </>
+              )}
+            </p>
 
-            <h4 style={{ margin: "1rem 0 0.25rem" }}>Generation by month</h4>
+            <h4 style={{ margin: "1rem 0 0.25rem" }}>Average day by month</h4>
+            <p className="chart-desc" style={{ marginTop: 0 }}>
+              Per-day averages for each month, so you can see how much generation is
+              actually used at home versus exported. Self-consumption plus export equals
+              generation.
+            </p>
             <div className="table-wrapper">
               <table className="plans-table">
                 <thead>
                   <tr>
                     <th>Month</th>
-                    <th>kWh per kW/day</th>
-                    <th>Avg generation per day</th>
-                    <th>Total for the month</th>
+                    <th>Generation/day</th>
+                    <th>Consumption/day</th>
+                    <th>Self-consumed/day</th>
+                    <th>Exported/day</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {solar.debug.months.map((m) => (
+                  {breakdown.months.map((m) => (
                     <tr key={m.month}>
                       <td className="retailer">{m.month}</td>
-                      <td>{m.kwhPerKwDay.toFixed(2)}</td>
-                      <td>{m.avgDailyKwh.toFixed(1)} kWh</td>
-                      <td>{Math.round(m.monthlyKwh).toLocaleString()} kWh</td>
+                      <td>{m.avgDailyGenerationKwh.toFixed(1)} kWh</td>
+                      <td>{m.avgDailyConsumptionKwh.toFixed(1)} kWh</td>
+                      <td>{m.avgDailySelfKwh.toFixed(1)} kWh</td>
+                      <td>{m.avgDailyExportKwh.toFixed(1)} kWh</td>
                     </tr>
                   ))}
                 </tbody>

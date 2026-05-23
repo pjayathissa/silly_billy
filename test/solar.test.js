@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   batteryROI,
   solarROI,
+  solarBreakdown,
   discountedPayback,
   gridRateForReading,
   SOLAR_SCENARIOS,
   DISCOUNT_RATE,
+  GREEN_LOAN_INTRO_YEARS,
 } from "../src/utils/solar.js";
 
 // ─── Data generators ─────────────────────────────────────────
@@ -215,5 +217,58 @@ describe("solarROI", () => {
     // so the battery model should at least run (applicable) on the synthetic data.
     expect(result.battery).not.toBeNull();
     expect(result.battery.applicable).toBe(true);
+  });
+});
+
+// ─── solarBreakdown ──────────────────────────────────────────
+
+describe("solarBreakdown", () => {
+  const yearLoad = buildData("2025-01-01T00:00:00", 365, () => ({ kwh: 0.4, exportKwh: 0 }));
+  const tariff = { baseRate: 32, touRates: [], solarExportRate: 10 };
+
+  it("returns 12 months and per-day self + export sums to generation", () => {
+    const b = solarBreakdown(yearLoad, tariff, { sizeKw: 5, capex: 11000, interestRate: 0.05 });
+    expect(b.months).toHaveLength(12);
+    for (const m of b.months) {
+      expect(m.avgDailySelfKwh + m.avgDailyExportKwh).toBeCloseTo(m.avgDailyGenerationKwh, 5);
+    }
+  });
+
+  it("summer months generate more per day than winter months", () => {
+    const b = solarBreakdown(yearLoad, tariff, { sizeKw: 5, capex: 11000, interestRate: 0.05 });
+    const jan = b.months[0].avgDailyGenerationKwh;
+    const jun = b.months[5].avgDailyGenerationKwh;
+    expect(jan).toBeGreaterThan(jun);
+  });
+
+  it("total annual saving equals self-consumption saving plus export earning", () => {
+    const b = solarBreakdown(yearLoad, tariff, { sizeKw: 5, capex: 11000, interestRate: 0.05 });
+    expect(b.annualSaving).toBeCloseTo(b.selfConsumptionSaving + b.exportEarning, 6);
+  });
+
+  it("models a loan whose total interest matches repaid minus principal", () => {
+    const b = solarBreakdown(yearLoad, tariff, { sizeKw: 8.5, capex: 16500, interestRate: 0.05 });
+    if (b.loan.repaid) {
+      const totalRepaid = b.loan.annualRepayment * b.loan.years;
+      expect(b.loan.totalInterest).toBeCloseTo(totalRepaid - b.capex, 4);
+    }
+  });
+
+  it("a green loan repays faster than the same loan at the floating rate", () => {
+    const opts = { sizeKw: 8.5, capex: 16500, interestRate: 0.07 };
+    const standard = solarBreakdown(yearLoad, tariff, opts);
+    const green = solarBreakdown(yearLoad, tariff, { ...opts, greenLoan: true });
+    if (standard.loan.repaid && green.loan.repaid) {
+      expect(green.loan.years).toBeLessThan(standard.loan.years);
+      expect(green.loan.totalInterest).toBeLessThan(standard.loan.totalInterest);
+    }
+    expect(GREEN_LOAN_INTRO_YEARS).toBe(3);
+  });
+
+  it("reports an unpayable loan when savings cannot cover interest", () => {
+    // Tiny system against trivial load → negligible saving, huge relative cost.
+    const b = solarBreakdown(yearLoad, tariff, { sizeKw: 0.01, capex: 100000, interestRate: 0.1 });
+    expect(b.loan.repaid).toBe(false);
+    expect(b.loan.years).toBeNull();
   });
 });
