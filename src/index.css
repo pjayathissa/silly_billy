@@ -1061,6 +1061,11 @@ h3 {
   background: var(--green-100);
 }
 
+.plans-table tr.custom-row td {
+  background: var(--coral-50);
+  font-style: italic;
+}
+
 .plans-table td.positive {
   color: var(--green-600);
   font-weight: 600;
