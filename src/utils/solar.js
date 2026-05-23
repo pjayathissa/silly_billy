@@ -22,6 +22,11 @@
 
 import { matchesTou } from "./analysis.js";
 
+// Dev-only flag. While true the UI surfaces an internal-calculations card so
+// the underlying maths can be verified against real data. Set to false before
+// shipping to production to hide that card.
+export const DEV_MODE = true;
+
 // ─── Shared financial assumptions ───────────────────────────
 // Real discount rate used for the time-value-of-money payback.
 export const DISCOUNT_RATE = 0.05;
@@ -317,6 +322,64 @@ function generationForReading(timestamp, sizeKw) {
   return sizeKw * dailyPerKw * MONTH_WEIGHTS[m][slot];
 }
 
+// Days per month (Jan–Dec) for turning a daily generation figure into a
+// monthly total. Feb uses 28 — close enough for modelling.
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/**
+ * Build the dev-only internal-calculations breakdown for the chosen scenario,
+ * so the maths can be sanity-checked against the source constants:
+ *   - self-consumption saving vs export earning (annualised, from `best`)
+ *   - modelled generation per month and per average day of that month, taken
+ *     straight from NZ_KWH_PER_KW_DAY × system size (independent of data span)
+ *   - value eroded by discounting/inflation: nominal cumulative savings over
+ *     the payback period vs their present value (which equals the capex).
+ */
+function buildSolarDebug(best) {
+  const sizeKw = best.sizeKw;
+  const months = MONTH_NAMES.map((name, m) => {
+    const avgDailyKwh = sizeKw * NZ_KWH_PER_KW_DAY[m];
+    return {
+      month: name,
+      kwhPerKwDay: NZ_KWH_PER_KW_DAY[m],
+      avgDailyKwh,
+      monthlyKwh: avgDailyKwh * DAYS_IN_MONTH[m],
+    };
+  });
+  const annualGenerationKwh = months.reduce((s, x) => s + x.monthlyKwh, 0);
+
+  // Discounting/inflation erosion over the payback period. By the definition of
+  // discounted payback the present value of savings at payback ≈ the capex, so
+  // the gap to the nominal sum is what time-value-of-money (inflation) erodes.
+  let inflation = null;
+  if (best.paybackYears != null) {
+    const nominalCumulative = best.annualSaving * best.paybackYears;
+    const presentValue = best.capex;
+    inflation = {
+      paybackYears: best.paybackYears,
+      annualSaving: best.annualSaving,
+      nominalCumulative,
+      presentValue,
+      lostToDiscounting: nominalCumulative - presentValue,
+    };
+  }
+
+  return {
+    sizeKw,
+    label: best.label,
+    selfConsumptionSaving: best.selfConsumptionSaving,
+    exportEarning: best.exportEarning,
+    months,
+    annualGenerationKwh,
+    inflation,
+  };
+}
+
 /** Annuity factor: present value of $1/year for `years` years at `rate`. */
 function annuityFactor(years, rate = DISCOUNT_RATE) {
   let f = 0;
@@ -355,12 +418,16 @@ function evaluateScenario(data, tariff, scenario, annualScale) {
     synthetic.push({ timestamp: r.timestamp, kwh: residualLoad, exportKwh: exported });
   }
 
-  const annualSaving = ((selfCents + exportCents) / 100) * annualScale;
+  const selfConsumptionSaving = (selfCents / 100) * annualScale;
+  const exportEarning = (exportCents / 100) * annualScale;
+  const annualSaving = selfConsumptionSaving + exportEarning;
   const paybackYears = discountedPayback(scenario.capex, annualSaving);
 
   return {
     ...scenario,
     annualSaving,
+    selfConsumptionSaving,
+    exportEarning,
     annualGenerationKwh: genKwh * annualScale,
     annualSurplusKwh: surplusKwh * annualScale,
     paybackYears,
@@ -464,5 +531,6 @@ export function solarROI(data, tariff) {
     loadShift,
     battery: battery.applicable ? battery : null,
     combined,
+    debug: DEV_MODE ? buildSolarDebug(best) : null,
   };
 }
