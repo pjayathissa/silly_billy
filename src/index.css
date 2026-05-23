@@ -259,6 +259,55 @@ h3 {
   margin-bottom: 0;
 }
 
+/* ── Privacy Label ────────────────────────────────────── */
+.privacy-label {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.privacy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  color: var(--grey-500);
+  font-size: 0.85rem;
+  font-family: var(--font);
+  cursor: pointer;
+  padding: 0.35rem 0;
+  transition: color 0.15s;
+}
+
+.privacy-badge:hover {
+  color: var(--grey-700);
+}
+
+.privacy-icon {
+  flex-shrink: 0;
+  color: var(--green-500);
+}
+
+.privacy-more {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.privacy-detail {
+  max-width: 480px;
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--green-100);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--grey-700);
+  line-height: 1.6;
+  text-align: left;
+}
+
 /* ── Upload Screen ────────────────────────────────────── */
 .upload-screen {
   text-align: center;
@@ -1000,6 +1049,39 @@ h3 {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--grey-800);
+}
+
+/* ── Footer ───────────────────────────────────────────── */
+.site-footer {
+  margin-top: 3rem;
+  padding: 1rem 1.5rem;
+  background: var(--navy-800);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  font-size: 0.85rem;
+  font-weight: 400;
+  border-radius: 0;
+  /* break out of #root max-width to span full viewport */
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+}
+
+.site-footer a.footer-link {
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+}
+
+.site-footer a.footer-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.site-footer .footer-brand {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* ── Responsive ───────────────────────────────────────── */

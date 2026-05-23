@@ -390,8 +390,9 @@ describe("dailyProfile", () => {
     const data = generateData(7, 0.5);
     const profile = dailyProfile(data);
     // Every slot has 0.5 kWh across all 7 days, average = 0.5
+    // dailyProfile multiplies by 2 to convert half-hourly kWh to hourly kWh rate
     for (const slot of profile) {
-      expect(slot.kwh).toBeCloseTo(0.5, 3);
+      expect(slot.kwh).toBeCloseTo(1.0, 3);
     }
   });
 });

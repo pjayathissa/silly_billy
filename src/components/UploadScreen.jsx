@@ -10,6 +10,7 @@ export default function UploadScreen({ onUpload }) {
   const [dataFile, setDataFile] = useState(null);
   const [pdfFile, setPdfFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
   const handleSubmit = useCallback(async () => {
     if (!dataFile) return;
@@ -45,14 +46,33 @@ export default function UploadScreen({ onUpload }) {
     <div className="upload-screen">
       <div className="hero">
         <div className="hero-icon">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <svg width="36" height="36" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="24" fill="#ff6b6b"/><circle cx="17" cy="22" r="10" fill="#ffffff" stroke="#1a2d4a" strokeWidth="1.5"/><circle cx="20" cy="19" r="5" fill="#1a2d4a"/><circle cx="22" cy="17" r="1.8" fill="#ffffff"/><circle cx="33" cy="24" r="8" fill="#ffffff" stroke="#1a2d4a" strokeWidth="1.5"/><circle cx="30" cy="26" r="4" fill="#1a2d4a"/><circle cx="31" cy="25" r="1.4" fill="#ffffff"/></svg>
         </div>
         <h1>Silly Billy</h1>
-        <p className="hero-tagline">Analyse your actual electricity data.</p>
+        <p className="hero-tagline">Analyse your electricity data.</p>
+        <div className="privacy-label">
+          <button
+            className="privacy-badge"
+            onClick={() => setPrivacyExpanded((v) => !v)}
+            aria-expanded={privacyExpanded}
+          >
+            <svg className="privacy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Your data is private and stays on your device{" "}
+            <span className="privacy-more">({privacyExpanded ? "less info" : "more info"})</span>
+          </button>
+          {privacyExpanded && (
+            <p className="privacy-detail">
+              Silly Billy is an application that runs entirely on your device.
+              The spreadsheets and PDF&apos;s that you upload do not leave your
+              device, and therefore don&apos;t touch any server or database. The
+              data you provide is not used for any training purposes.
+            </p>
+          )}
+        </div>
       </div>
 
       <ol className="steps-list">
-        <li>Request 12 months electricity data from your retailer in CSV or Excel format</li>
+        <li>Request half hourly electricity data from your retailer in CSV or Excel format</li>
         <li>Upload the file below</li>
         <li>Optional — upload a PDF copy of your bill to auto-detect your current plan</li>
       </ol>
