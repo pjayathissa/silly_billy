@@ -8,7 +8,7 @@ import {
   dailyProfile, seasonalProfiles, weeklyTrend,
   generateInsights, currentAnnualCost, rankPlans,
 } from "../utils/analysis.js";
-import { batteryROI, solarROI, DISCOUNT_RATE } from "../utils/solar.js";
+import { batteryROI, solarROI, DISCOUNT_RATE, DEV_MODE } from "../utils/solar.js";
 import { tariffsLastUpdated } from "../tariffs.js";
 import StepIndicator from "./StepIndicator.jsx";
 
@@ -420,6 +420,76 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                   : " — but it does not improve on solar alone, so the battery is best treated as a resilience add-on."}
               </p>
             )}
+          </section>
+        )}
+
+        {/* ── DEV ONLY: Solar internal calculations (set DEV_MODE=false to hide) ── */}
+        {DEV_MODE && solar && solar.applicable && solar.debug && (
+          <section className="solar-section card-coral">
+            <h3>🛠️ Solar Maths Breakdown (dev only)</h3>
+            <p className="data-note" style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.5rem" }}>
+              Internal calculations for the best scenario ({solar.debug.label}),
+              shown so the figures can be verified. This card is hidden in
+              production (DEV_MODE = false).
+            </p>
+
+            <div className="solar-stats">
+              <div className="solar-stat">
+                <span className="solar-stat-label">Saving from self-consumption</span>
+                <span className="solar-stat-value">${Math.round(solar.debug.selfConsumptionSaving).toLocaleString()}/yr</span>
+              </div>
+              <div className="solar-stat">
+                <span className="solar-stat-label">Earnings from export</span>
+                <span className="solar-stat-value">${Math.round(solar.debug.exportEarning).toLocaleString()}/yr</span>
+              </div>
+              <div className="solar-stat">
+                <span className="solar-stat-label">Total annual saving</span>
+                <span className="solar-stat-value">${Math.round(solar.debug.selfConsumptionSaving + solar.debug.exportEarning).toLocaleString()}/yr</span>
+              </div>
+              <div className="solar-stat">
+                <span className="solar-stat-label">Modelled annual generation</span>
+                <span className="solar-stat-value">{Math.round(solar.debug.annualGenerationKwh).toLocaleString()} kWh</span>
+              </div>
+            </div>
+
+            {solar.debug.inflation && (
+              <>
+                <h4 style={{ margin: "1rem 0 0.25rem" }}>Value lost to discounting / inflation</h4>
+                <p className="chart-desc" style={{ marginTop: 0 }}>
+                  Over the {solar.debug.inflation.paybackYears.toFixed(1)}-year payback you save
+                  ${Math.round(solar.debug.inflation.nominalCumulative).toLocaleString()} in nominal dollars,
+                  but at the {Math.round(DISCOUNT_RATE * 100)}% real discount rate those savings are only
+                  worth ${Math.round(solar.debug.inflation.presentValue).toLocaleString()} today (≈ the
+                  install cost). The difference,
+                  ${Math.round(solar.debug.inflation.lostToDiscounting).toLocaleString()}, is eroded by
+                  the time-value of money.
+                </p>
+              </>
+            )}
+
+            <h4 style={{ margin: "1rem 0 0.25rem" }}>Generation by month</h4>
+            <div className="table-wrapper">
+              <table className="plans-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>kWh per kW/day</th>
+                    <th>Avg generation per day</th>
+                    <th>Total for the month</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {solar.debug.months.map((m) => (
+                    <tr key={m.month}>
+                      <td className="retailer">{m.month}</td>
+                      <td>{m.kwhPerKwDay.toFixed(2)}</td>
+                      <td>{m.avgDailyKwh.toFixed(1)} kWh</td>
+                      <td>{Math.round(m.monthlyKwh).toLocaleString()} kWh</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         )}
 
