@@ -132,20 +132,27 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
   const [sizeInput, setSizeInput] = useState("");
   const [capexInput, setCapexInput] = useState("");
   const [rateInput, setRateInput] = useState("");
+  const [exportInput, setExportInput] = useState("");
   const [greenLoan, setGreenLoan] = useState(false);
 
+  const defaultExportRate = currentTariff.solarExportRate || 0;
   const breakdownSizeKw = sizeInput !== "" ? Number(sizeInput) : solar?.best?.sizeKw;
   const breakdownCapex = capexInput !== "" ? Number(capexInput) : solar?.best?.capex;
   const breakdownRate = rateInput !== "" ? Number(rateInput) / 100 : DEFAULT_LOAN_RATE;
+  const breakdownExportRate = exportInput !== "" ? Number(exportInput) : defaultExportRate;
+  // A custom row is shown in the comparison table when the system or export
+  // assumptions (the things that move the table's columns) have been changed.
+  const breakdownCustomised = sizeInput !== "" || capexInput !== "" || exportInput !== "";
   const breakdown = useMemo(() => {
     if (!solar || !solar.applicable) return null;
     return solarBreakdown(data, currentTariff, {
       sizeKw: breakdownSizeKw,
       capex: breakdownCapex,
       interestRate: breakdownRate,
+      exportRate: breakdownExportRate,
       greenLoan,
     });
-  }, [solar, data, currentTariff, breakdownSizeKw, breakdownCapex, breakdownRate, greenLoan]);
+  }, [solar, data, currentTariff, breakdownSizeKw, breakdownCapex, breakdownRate, breakdownExportRate, greenLoan]);
 
   // Merge seasonal data for the overlay chart
   const seasonalMerged = profile.map((_, i) => ({
@@ -407,6 +414,15 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                       <td>{s.paybackYears != null ? `${s.paybackYears.toFixed(1)} yrs` : "> 40 yrs"}</td>
                     </tr>
                   ))}
+                  {breakdownCustomised && breakdown && (
+                    <tr className="custom-row">
+                      <td className="retailer">{breakdown.sizeKw} kW (custom)</td>
+                      <td>${Math.round(breakdown.capex).toLocaleString()}</td>
+                      <td>{Math.round(breakdown.annualGenerationKwh).toLocaleString()} kWh</td>
+                      <td>${Math.round(breakdown.annualSaving).toLocaleString()}</td>
+                      <td>{breakdown.paybackYears != null ? `${breakdown.paybackYears.toFixed(1)} yrs` : "> 40 yrs"}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -471,6 +487,14 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 />
               </label>
               <label className="solar-field">
+                <span>Solar export rate (c/kWh)</span>
+                <input
+                  type="number" min="0" step="0.5" inputMode="decimal"
+                  value={exportInput} placeholder={String(defaultExportRate)}
+                  onChange={(e) => setExportInput(e.target.value)}
+                />
+              </label>
+              <label className="solar-field">
                 <span>Loan interest rate (%)</span>
                 <input
                   type="number" min="0" step="0.1" inputMode="decimal"
@@ -504,6 +528,12 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
               <div className="solar-stat">
                 <span className="solar-stat-label">Modelled annual generation</span>
                 <span className="solar-stat-value">{Math.round(breakdown.annualGenerationKwh).toLocaleString()} kWh</span>
+              </div>
+              <div className="solar-stat">
+                <span className="solar-stat-label">Payback period</span>
+                <span className="solar-stat-value">
+                  {breakdown.loan.repaid ? `${breakdown.loan.years.toFixed(1)} years` : "> 60 years"}
+                </span>
               </div>
             </div>
 
@@ -546,6 +576,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                     <th>Consumption/day</th>
                     <th>Self-consumed/day</th>
                     <th>Exported/day</th>
+                    <th>Savings/day</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -556,6 +587,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                       <td>{m.avgDailyConsumptionKwh.toFixed(1)} kWh</td>
                       <td>{m.avgDailySelfKwh.toFixed(1)} kWh</td>
                       <td>{m.avgDailyExportKwh.toFixed(1)} kWh</td>
+                      <td>${m.avgDailySavingsDollars.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>

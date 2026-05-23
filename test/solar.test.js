@@ -246,6 +246,22 @@ describe("solarBreakdown", () => {
     expect(b.annualSaving).toBeCloseTo(b.selfConsumptionSaving + b.exportEarning, 6);
   });
 
+  it("exposes a per-day savings figure and a discounted payback for the table", () => {
+    const b = solarBreakdown(yearLoad, tariff, { sizeKw: 5, capex: 11000, interestRate: 0.05 });
+    for (const m of b.months) {
+      expect(m.avgDailySavingsDollars).toBeGreaterThanOrEqual(0);
+    }
+    // The discounted payback should match the standalone helper at the same rate.
+    expect(b.paybackYears).toBeCloseTo(discountedPayback(11000, b.annualSaving), 4);
+  });
+
+  it("an export-rate override changes export earnings", () => {
+    const low = solarBreakdown(yearLoad, tariff, { sizeKw: 5, capex: 11000, exportRate: 5 });
+    const high = solarBreakdown(yearLoad, tariff, { sizeKw: 5, capex: 11000, exportRate: 20 });
+    expect(high.exportEarning).toBeGreaterThan(low.exportEarning);
+    expect(high.exportRate).toBe(20);
+  });
+
   it("models a loan whose total interest matches repaid minus principal", () => {
     const b = solarBreakdown(yearLoad, tariff, { sizeKw: 8.5, capex: 16500, interestRate: 0.05 });
     if (b.loan.repaid) {

@@ -525,7 +525,7 @@ export function solarBreakdown(data, tariff, opts = {}) {
   const capex = opts.capex;
   const floatingRate = opts.interestRate ?? DEFAULT_LOAN_RATE;
   const greenLoan = !!opts.greenLoan;
-  const exportRate = tariff.solarExportRate || 0;
+  const exportRate = opts.exportRate ?? (tariff.solarExportRate || 0);
 
   const span = spanDays(data);
   const annualScale = 365 / span;
@@ -534,6 +534,7 @@ export function solarBreakdown(data, tariff, opts = {}) {
   const loadSum = new Array(12).fill(0);
   const selfSum = new Array(12).fill(0);
   const exportSum = new Array(12).fill(0);
+  const saveCents = new Array(12).fill(0);
   const dayKeys = Array.from({ length: 12 }, () => new Set());
 
   let selfCents = 0;
@@ -552,8 +553,11 @@ export function solarBreakdown(data, tariff, opts = {}) {
     exportSum[m] += exported;
     dayKeys[m].add(dateKey(r.timestamp));
 
-    selfCents += selfConsumed * gridRateForReading(r.timestamp, tariff);
-    exportCents += exported * exportRate;
+    const selfValue = selfConsumed * gridRateForReading(r.timestamp, tariff);
+    const exportValue = exported * exportRate;
+    selfCents += selfValue;
+    exportCents += exportValue;
+    saveCents[m] += selfValue + exportValue;
   }
 
   const months = MONTH_NAMES.map((name, m) => {
@@ -566,6 +570,7 @@ export function solarBreakdown(data, tariff, opts = {}) {
       avgDailyConsumptionKwh: loadSum[m] / div,
       avgDailySelfKwh: selfSum[m] / div,
       avgDailyExportKwh: exportSum[m] / div,
+      avgDailySavingsDollars: saveCents[m] / 100 / div,
     };
   });
 
@@ -587,10 +592,12 @@ export function solarBreakdown(data, tariff, opts = {}) {
   return {
     sizeKw,
     capex,
+    exportRate,
     selfConsumptionSaving,
     exportEarning,
     annualSaving,
     annualGenerationKwh,
+    paybackYears: discountedPayback(capex, annualSaving),
     months,
     loan,
   };
