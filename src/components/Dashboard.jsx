@@ -474,7 +474,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 <span>Solar system size (kW)</span>
                 <input
                   type="number" min="0" step="0.5" inputMode="decimal"
-                  value={sizeInput} placeholder={String(solar.best.sizeKw)}
+                  value={sizeInput !== "" ? sizeInput : String(solar.best.sizeKw)}
                   onChange={(e) => setSizeInput(e.target.value)}
                 />
               </label>
@@ -482,7 +482,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 <span>System cost ($)</span>
                 <input
                   type="number" min="0" step="500" inputMode="numeric"
-                  value={capexInput} placeholder={String(solar.best.capex)}
+                  value={capexInput !== "" ? capexInput : String(solar.best.capex)}
                   onChange={(e) => setCapexInput(e.target.value)}
                 />
               </label>
@@ -490,7 +490,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 <span>Solar export rate (c/kWh)</span>
                 <input
                   type="number" min="0" step="0.5" inputMode="decimal"
-                  value={exportInput} placeholder={String(defaultExportRate)}
+                  value={exportInput !== "" ? exportInput : String(defaultExportRate)}
                   onChange={(e) => setExportInput(e.target.value)}
                 />
               </label>
@@ -498,7 +498,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 <span>Loan interest rate (%)</span>
                 <input
                   type="number" min="0" step="0.1" inputMode="decimal"
-                  value={rateInput} placeholder={String(Math.round(DEFAULT_LOAN_RATE * 100))}
+                  value={rateInput !== "" ? rateInput : String(Math.round(DEFAULT_LOAN_RATE * 100))}
                   onChange={(e) => setRateInput(e.target.value)}
                 />
               </label>
