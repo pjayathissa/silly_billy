@@ -8,6 +8,7 @@ import {
   dailyProfile, seasonalProfiles, weeklyTrend,
   generateInsights, currentAnnualCost, rankPlans,
 } from "../utils/analysis.js";
+import { batteryROI, solarROI, DISCOUNT_RATE } from "../utils/solar.js";
 import { tariffsLastUpdated } from "../tariffs.js";
 import StepIndicator from "./StepIndicator.jsx";
 
@@ -117,6 +118,14 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
   const myCost = currentAnnualCost(data, currentTariff);
   const insights = generateInsights(data, currentTariff, nightLoadOptions);
   const plans = rankPlans(data, myCost);
+
+  // Two-way energy flows: households already exporting solar get a battery
+  // assessment (issue #36); everyone else gets a "should I install solar?"
+  // assessment (issue #37).
+  const totalExportKwh = data.reduce((s, d) => s + (d.exportKwh || 0), 0);
+  const hasSolar = totalExportKwh > 1;
+  const battery = hasSolar ? batteryROI(data, currentTariff) : null;
+  const solar = hasSolar ? null : solarROI(data, currentTariff);
 
   // Merge seasonal data for the overlay chart
   const seasonalMerged = profile.map((_, i) => ({
@@ -291,6 +300,128 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
             ))}
           </ul>
         </section>
+
+        {/* ── Battery Assessment (existing solar exporters — issue #36) ── */}
+        {battery && (
+          <section className="solar-section card-coral">
+            <h3>Battery Storage Assessment</h3>
+            {!battery.applicable ? (
+              <p className="chart-desc">{battery.reason}</p>
+            ) : (
+              <>
+                <p className="chart-desc">
+                  You exported solar across {battery.monthsCovered} month(s) of
+                  your data. We modelled an {battery.capacityKwh} kWh battery that
+                  stores daytime export and discharges it against your after-sunset
+                  load, carrying any unused charge to the next day.
+                </p>
+                <div className="solar-stats">
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Annual solar export</span>
+                    <span className="solar-stat-value">{Math.round(battery.annualExportKwh).toLocaleString()} kWh</span>
+                  </div>
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Energy shifted to evenings</span>
+                    <span className="solar-stat-value">{Math.round(battery.annualDischargeKwh).toLocaleString()} kWh/yr</span>
+                  </div>
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Estimated annual saving</span>
+                    <span className="solar-stat-value">${Math.round(battery.annualSaving).toLocaleString()}</span>
+                  </div>
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Battery cost (assumed)</span>
+                    <span className="solar-stat-value">${battery.cost.toLocaleString()}</span>
+                  </div>
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Discounted payback ({Math.round(DISCOUNT_RATE * 100)}%)</span>
+                    <span className="solar-stat-value">
+                      {battery.paybackYears != null ? `${battery.paybackYears.toFixed(1)} years` : "> 20 years"}
+                    </span>
+                  </div>
+                </div>
+                <p className={`solar-verdict verdict-${battery.recommendation}`}>
+                  {battery.recommendation === "recommend" &&
+                    "Recommended — the payback is under 15 years, so a battery looks worthwhile for your household."}
+                  {battery.recommendation === "consider" &&
+                    "Worth considering — the payback is under 20 years, but you may want to wait for battery prices to fall further before committing."}
+                  {battery.recommendation === "uneconomic" &&
+                    "The economics of a battery don't currently stack up for your household (payback over 20 years). It may still be worth it as a resilience / backup-power measure during outages."}
+                </p>
+              </>
+            )}
+          </section>
+        )}
+
+        {/* ── Solar Installation Assessment (non-exporters — issue #37) ── */}
+        {solar && solar.applicable && (
+          <section className="solar-section card-coral">
+            <h3>Should You Install Solar?</h3>
+            <p className="data-note" style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.25rem" }}>
+              Generation is modelled from average New Zealand sun-hours; installed
+              costs are from AI web research as of {solar.dataUpdated} and may
+              contain errors. Always get quotes for your specific roof and location.
+            </p>
+            <p className="chart-desc">
+              Modelled against your actual half-hourly usage. Self-consumed solar
+              saves your grid rate (~{Math.round(solar.avgGridRate)}c/kWh); surplus
+              is exported at {solar.exportRate ? `${solar.exportRate}c/kWh` : "your export rate (not set)"}.
+            </p>
+            <div className="table-wrapper">
+              <table className="plans-table">
+                <thead>
+                  <tr>
+                    <th>System</th>
+                    <th>Installed cost</th>
+                    <th>Annual generation</th>
+                    <th>Annual saving</th>
+                    <th>Payback ({Math.round(DISCOUNT_RATE * 100)}%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {solar.scenarios.map((s) => (
+                    <tr key={s.sizeKw} className={s.sizeKw === solar.best.sizeKw ? "saving" : ""}>
+                      <td className="retailer">{s.label}{s.sizeKw === solar.best.sizeKw ? " ★" : ""}</td>
+                      <td>${s.capex.toLocaleString()}</td>
+                      <td>{Math.round(s.annualGenerationKwh).toLocaleString()} kWh</td>
+                      <td>${Math.round(s.annualSaving).toLocaleString()}</td>
+                      <td>{s.paybackYears != null ? `${s.paybackYears.toFixed(1)} yrs` : "> 40 yrs"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className={`solar-verdict verdict-${solar.recommendation}`}>
+              {solar.recommendation === "recommend" &&
+                `Recommended — the best value is the ${solar.best.label} system, paying back in about ${solar.best.paybackYears.toFixed(1)} years (under 10).`}
+              {solar.recommendation === "marginal" && (
+                <>
+                  At your current usage the best option ({solar.best.label}) pays
+                  back in about {solar.best.paybackYears.toFixed(1)} years.
+                  {solar.loadShift && solar.loadShift.percentOfLoad != null && (
+                    <>
+                      {" "}If you shifted roughly {Math.round(solar.loadShift.percentOfLoad)}% of
+                      your usage into daylight hours, the payback would drop under 10 years
+                      {solar.loadShift.achievable ? "." : " (though that may be more than your surplus generation can cover)."}
+                    </>
+                  )}
+                </>
+              )}
+              {solar.recommendation === "uneconomic" &&
+                `Solar doesn't currently stack up economically for your usage — the best option (${solar.best.label}) takes over 15 years to pay back. This can change as power prices rise or panel costs fall.`}
+            </p>
+            {solar.combined && solar.combined.paybackYears != null && (
+              <p className="solar-pairing chart-desc">
+                Pairing the {solar.best.label} system with an 8 kWh battery would
+                cost about ${solar.combined.capex.toLocaleString()} together and save
+                roughly ${Math.round(solar.combined.annualSaving).toLocaleString()}/year
+                (≈ {solar.combined.paybackYears.toFixed(1)} year payback)
+                {solar.combined.paybackYears < solar.best.paybackYears
+                  ? " — slightly better economics than solar alone."
+                  : " — but it does not improve on solar alone, so the battery is best treated as a resilience add-on."}
+              </p>
+            )}
+          </section>
+        )}
 
         {/* ── Plan Comparison Table ── */}
         <section className="plans-section card-coral">
