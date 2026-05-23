@@ -48,6 +48,13 @@ const OFFPEAK_KEYWORDS = [
   "ev rate", "night",
 ];
 
+// Solar export / buy-back tariff (two-way energy flows)
+const EXPORT_KEYWORDS = [
+  "solar export", "export rate", "buy-back", "buy back", "buyback",
+  "feed-in", "feed in", "feedin", "distributed generation",
+  "solar buy", "exported", "export tariff", "generation credit",
+];
+
 // Lines containing these keywords are skipped (totals, headers, etc.)
 const SKIP_KEYWORDS = [
   "total", "subtotal", "sub-total", "gst", "tax",
@@ -213,7 +220,7 @@ function extractDailyRateFromLine(line) {
  */
 function scanLinesForRates(text) {
   const lines = text.split("\n");
-  const results = { dailyCharge: null, peakRate: null, offPeakRate: null };
+  const results = { dailyCharge: null, peakRate: null, offPeakRate: null, solarExportRate: null };
 
   for (const line of lines) {
     const lower = line.toLowerCase();
@@ -224,23 +231,32 @@ function scanLinesForRates(text) {
     // Skip total / GST / balance lines
     if (SKIP_KEYWORDS.some((kw) => lower.includes(kw))) continue;
 
+    // Solar export is checked first — these lines are specific and would
+    // otherwise be misclassified (e.g. "export rate" contains no other keyword).
+    const isExport = EXPORT_KEYWORDS.some((kw) => lower.includes(kw));
+
     // Classify the line
     const isDaily =
-      DAILY_KEYWORDS.some((kw) => lower.includes(kw)) ||
-      (lower.includes("daily") && !/kWh/i.test(line));
+      !isExport &&
+      (DAILY_KEYWORDS.some((kw) => lower.includes(kw)) ||
+        (lower.includes("daily") && !/kWh/i.test(line)));
 
     // Guard: "uncontrolled" contains "controlled" — don't let it trigger off-peak
     const hasUncontrolled = lower.includes("uncontrolled");
     const isOffPeak =
+      !isExport &&
       !hasUncontrolled &&
       OFFPEAK_KEYWORDS.some((kw) => lower.includes(kw));
 
     const isPeak =
-      !isOffPeak && !isDaily &&
+      !isExport && !isOffPeak && !isDaily &&
       PEAK_KEYWORDS.some((kw) => lower.includes(kw));
 
     // Extract the appropriate rate from this line
-    if (isDaily && results.dailyCharge === null) {
+    if (isExport && results.solarExportRate === null) {
+      const val = extractKwhRateFromLine(line);
+      if (val !== null) results.solarExportRate = val;
+    } else if (isDaily && results.dailyCharge === null) {
       const val = extractDailyRateFromLine(line);
       if (val !== null) results.dailyCharge = val;
     } else if (isOffPeak && results.offPeakRate === null) {
@@ -362,6 +378,12 @@ export async function extractTariffFromPDF(arrayBuffer) {
           "off-peak", "off peak", "night rate", "overnight",
           "controlled", "economy", "shoulder",
         ]),
+      solarExportRate:
+        lineRates.solarExportRate ??
+        findRateNearKeyword(text, [
+          "solar export", "export rate", "buy-back", "buy back", "buyback",
+          "feed-in", "feed in", "distributed generation", "export tariff",
+        ]),
     };
   } catch (err) {
     console.error("PDF parsing error:", err);
@@ -369,6 +391,7 @@ export async function extractTariffFromPDF(arrayBuffer) {
       dailyCharge: null,
       peakRate: null,
       offPeakRate: null,
+      solarExportRate: null,
     };
   }
 }

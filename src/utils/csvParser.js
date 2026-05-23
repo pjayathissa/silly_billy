@@ -12,7 +12,11 @@
  *   3. If wide: find the date column, expand rows into 48 readings each
  *   4. If long: find the timestamp column and kWh column by header names + data patterns
  *   5. Validate values are reasonable for residential half-hourly data (0–5 kWh)
- *   6. Return normalised array of { timestamp: Date, kwh: number }
+ *   6. Return normalised array of { timestamp: Date, kwh: number, exportKwh: number }
+ *
+ * Solar export (two-way flows) is captured as `exportKwh` on each reading:
+ *   - A dedicated export/generation column (detected by header keywords), or
+ *   - Negative consumption values, which are treated as export.
  */
 
 import Papa from "papaparse";
@@ -24,6 +28,13 @@ const TIMESTAMP_PATTERNS = [
 const KWH_PATTERNS = [
   /kwh/i, /consumption/i, /usage/i, /energy/i, /demand/i, /reading/i,
   /value/i, /amount/i, /units/i,
+];
+// Header names that indicate a solar export / generation column.
+// Checked before the consumption patterns so an export column is never
+// mistaken for the import column.
+const EXPORT_PATTERNS = [
+  /export/i, /generation/i, /generated/i, /injection/i, /injected/i,
+  /feed[\s-]?in/i, /feed[\s-]?out/i, /supply\s*to\s*grid/i, /solar/i,
 ];
 
 // ─── Wide-format time-slot header patterns ──────────────────
@@ -158,11 +169,15 @@ function parseWideFormat(dataRows, timeColumns, dateColIndex, warnings) {
       const val = tc.colIndex < row.length ? row[tc.colIndex] : null;
       const kwh = parseFloat(val);
       if (isNaN(kwh) || val === null || val === "") continue;
-      if (kwh < 0) continue;
 
       const timestamp = new Date(baseDate);
       timestamp.setHours(tc.hour24, tc.minute, 0, 0);
-      data.push({ timestamp, kwh });
+      // Negative readings represent solar export back to the grid.
+      if (kwh < 0) {
+        data.push({ timestamp, kwh: 0, exportKwh: -kwh });
+      } else {
+        data.push({ timestamp, kwh, exportKwh: 0 });
+      }
     }
   }
 
@@ -382,7 +397,7 @@ function handleSummaryRows(data, dataRows, startCol, endCol, kwhCol, warnings) {
     }
 
     if (approxKwh !== null) {
-      cleaned.push({ timestamp: new Date(t), kwh: approxKwh });
+      cleaned.push({ timestamp: new Date(t), kwh: approxKwh, exportKwh: 0 });
       existingSlots.add(t);
       filledCount++;
 
@@ -428,6 +443,34 @@ function transpose(rows) {
     result.push(rows.map((r) => (col < r.length ? r[col] : "")));
   }
   return result;
+}
+
+/**
+ * Resolve import (kWh) and export (kWh) for a single reading.
+ * - A positive consumption value with a separate export column yields both.
+ * - A negative consumption value is treated as net export.
+ * Returns { kwh, exportKwh } or null if the consumption value is unparseable.
+ */
+function readImportExport(row, kwhCol, exportCol) {
+  const kwhRaw = kwhCol >= 0 && kwhCol < row.length ? row[kwhCol] : null;
+  const kwh = parseFloat(kwhRaw);
+  if (isNaN(kwh)) return null;
+
+  let importKwh = kwh;
+  let exportKwh = 0;
+
+  if (exportCol >= 0 && exportCol < row.length) {
+    const ex = parseFloat(row[exportCol]);
+    if (!isNaN(ex) && ex > 0) exportKwh = ex;
+  }
+
+  // Negative consumption represents net export back to the grid.
+  if (importKwh < 0) {
+    exportKwh += -importKwh;
+    importKwh = 0;
+  }
+
+  return { kwh: importKwh, exportKwh };
 }
 
 /**
@@ -520,6 +563,26 @@ export function parseCSV(fileContent) {
   // Determine number of columns
   const numCols = Math.max(...dataRows.slice(0, 20).map((r) => r.length));
 
+  // Identify a dedicated export column by header keyword first (e.g.
+  // "Export kWh", "Generation"). It is excluded from consumption-column
+  // scoring so an export column is never mistaken for the import column.
+  let exportCol = -1;
+  if (headers) {
+    for (let col = 0; col < numCols; col++) {
+      const headerName = headers[col] || "";
+      if (!EXPORT_PATTERNS.some((p) => p.test(headerName))) continue;
+      const values = dataRows.map((r) => (col < r.length ? r[col] : ""));
+      const numeric = values.slice(0, 50).filter((v) => {
+        const n = typeof v === "string" ? Number(v) : parseFloat(v);
+        return !isNaN(n);
+      }).length;
+      if (numeric > Math.min(50, values.length) * 0.5) {
+        exportCol = col;
+        break;
+      }
+    }
+  }
+
   // Score each column
   let bestTimestampCol = -1;
   let bestTimestampScore = 0;
@@ -527,6 +590,7 @@ export function parseCSV(fileContent) {
   let bestKwhScore = 0;
 
   for (let col = 0; col < numCols; col++) {
+    if (col === exportCol) continue;
     const values = dataRows.map((r) => (col < r.length ? r[col] : ""));
 
     // Check header name first
@@ -553,7 +617,7 @@ export function parseCSV(fileContent) {
     // Re-pick kwh from remaining columns
     bestKwhScore = 0;
     for (let col = 0; col < numCols; col++) {
-      if (col === bestTimestampCol) continue;
+      if (col === bestTimestampCol || col === exportCol) continue;
       const values = dataRows.map((r) => (col < r.length ? r[col] : ""));
       const headerName = headers ? headers[col] || "" : "";
       const kwhHeaderMatch = KWH_PATTERNS.some((p) => p.test(headerName));
@@ -569,7 +633,7 @@ export function parseCSV(fileContent) {
   let secondTimestampCol = -1;
   let secondTimestampScore = 0;
   for (let col = 0; col < numCols; col++) {
-    if (col === bestTimestampCol || col === bestKwhCol) continue;
+    if (col === bestTimestampCol || col === bestKwhCol || col === exportCol) continue;
     const values = dataRows.map((r) => (col < r.length ? r[col] : ""));
     const score = scoreTimestampColumn(values);
     if (score > secondTimestampScore) {
@@ -591,13 +655,12 @@ export function parseCSV(fileContent) {
 
   for (const row of dataRows) {
     const tsRaw = bestTimestampCol >= 0 && bestTimestampCol < row.length ? row[bestTimestampCol] : null;
-    const kwhRaw = bestKwhCol >= 0 && bestKwhCol < row.length ? row[bestKwhCol] : null;
 
     const ts = tryParseDate(String(tsRaw || ""));
-    const kwh = parseFloat(kwhRaw);
+    const reading = readImportExport(row, bestKwhCol, exportCol);
 
-    if (ts && !isNaN(kwh) && kwh >= 0) {
-      data.push({ timestamp: ts, kwh });
+    if (ts && reading) {
+      data.push({ timestamp: ts, ...reading });
     } else {
       parseErrors++;
     }
@@ -621,7 +684,7 @@ export function parseCSV(fileContent) {
     let bestIntervalCol = -1;
     let bestIntervalScore = 0;
     for (let col = 0; col < numCols; col++) {
-      if (col === bestTimestampCol || col === bestKwhCol) continue;
+      if (col === bestTimestampCol || col === bestKwhCol || col === exportCol) continue;
       const values = dataRows.map((r) => (col < r.length ? r[col] : ""));
       const score = scoreIntervalColumn(values);
       if (score > bestIntervalScore) {
@@ -634,17 +697,16 @@ export function parseCSV(fileContent) {
       const newData = [];
       for (const row of dataRows) {
         const tsRaw = bestTimestampCol >= 0 && bestTimestampCol < row.length ? row[bestTimestampCol] : null;
-        const kwhRaw = bestKwhCol >= 0 && bestKwhCol < row.length ? row[bestKwhCol] : null;
         const intervalRaw = bestIntervalCol < row.length ? row[bestIntervalCol] : null;
 
         const ts = tryParseDate(String(tsRaw || ""));
-        const kwh = parseFloat(kwhRaw);
+        const reading = readImportExport(row, bestKwhCol, exportCol);
         const interval = typeof intervalRaw === "number" ? intervalRaw : parseInt(intervalRaw);
 
-        if (ts && !isNaN(kwh) && kwh >= 0 && Number.isInteger(interval) && interval >= 1 && interval <= 48) {
+        if (ts && reading && Number.isInteger(interval) && interval >= 1 && interval <= 48) {
           const totalMinutes = (interval - 1) * 30;
           ts.setHours(Math.floor(totalMinutes / 60), totalMinutes % 60, 0, 0);
-          newData.push({ timestamp: ts, kwh });
+          newData.push({ timestamp: ts, ...reading });
         }
       }
       if (newData.length > 0) {

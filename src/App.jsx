@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import UploadScreen from "./components/UploadScreen.jsx";
 import TariffReview from "./components/TariffReview.jsx";
 import Dashboard from "./components/Dashboard.jsx";
@@ -15,6 +15,12 @@ import { extractTariffFromPDF } from "./utils/pdfParser.js";
 export default function App() {
   // "upload" | "review" | "dashboard"
   const [step, setStep] = useState("upload");
+
+  // Each step transition (e.g. Run Analysis → dashboard) should start at the
+  // top of the page rather than wherever the previous step was scrolled to.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [step]);
 
   const [consumptionData, setConsumptionData] = useState(null);
   const [csvWarnings, setCsvWarnings] = useState([]);
@@ -34,7 +40,7 @@ export default function App() {
     setNeedsCsvConfirm(csv.needsConfirmation);
 
     // Parse PDF if provided
-    let tariff = { dailyCharge: null, peakRate: null, offPeakRate: null, baseRate: null };
+    let tariff = { dailyCharge: null, peakRate: null, offPeakRate: null, baseRate: null, solarExportRate: null };
     if (pdfBuffer) {
       tariff = await extractTariffFromPDF(pdfBuffer);
     }

@@ -676,6 +676,47 @@ h3 {
   color: var(--coral-700);
 }
 
+/* ── Autofill Notice Modal ────────────────────────────── */
+.autofill-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 26, 50, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 100;
+}
+
+.autofill-modal {
+  background: #fff;
+  border-radius: var(--radius-md);
+  padding: 1.75rem;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 20px 50px rgba(12, 26, 50, 0.3);
+}
+
+.autofill-modal h3 {
+  margin-bottom: 0.75rem;
+  color: var(--navy-900);
+}
+
+.autofill-modal p {
+  color: var(--grey-700);
+  margin-bottom: 0.75rem;
+}
+
+.autofill-modal ul {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+}
+
+.autofill-modal li {
+  color: var(--grey-700);
+  margin-bottom: 0.25rem;
+}
+
 .csv-preview {
   margin-top: 0.75rem;
   overflow-x: auto;
@@ -916,6 +957,114 @@ h3 {
   padding: 1.5rem;
 }
 
+/* ── Solar & Battery assessment ───────────────────────── */
+.solar-section {
+  background: #fff;
+  border: 1px solid var(--grey-200);
+  border-top: 3px solid var(--coral-500);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+}
+
+.solar-customise {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  background: var(--coral-50);
+  border-radius: var(--radius-sm);
+}
+
+.solar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--grey-700);
+}
+
+.solar-field input[type="number"] {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--grey-200);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  width: 9rem;
+}
+
+.solar-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 22rem;
+  line-height: 1.4;
+}
+
+.solar-field-checkbox input {
+  flex: none;
+}
+
+.solar-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.solar-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 140px;
+  padding: 0.75rem 1rem;
+  background: var(--coral-50);
+  border-radius: var(--radius-sm);
+}
+
+.solar-stat-label {
+  font-size: 0.8rem;
+  color: var(--grey-400);
+}
+
+.solar-stat-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--grey-800);
+}
+
+.solar-verdict {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  border-left: 3px solid var(--grey-200);
+  background: var(--grey-100, #f3f4f6);
+}
+
+.verdict-recommend {
+  background: var(--green-100);
+  border-left-color: var(--green-600);
+  color: var(--green-700);
+}
+
+.verdict-consider,
+.verdict-marginal {
+  background: #fef9c3;
+  border-left-color: #ca8a04;
+  color: #854d0e;
+}
+
+.verdict-uneconomic {
+  background: var(--coral-50);
+  border-left-color: var(--coral-500);
+  color: var(--grey-700);
+}
+
+.solar-pairing {
+  margin-top: 0.75rem;
+}
+
 .table-wrapper {
   overflow-x: auto;
 }
@@ -951,6 +1100,11 @@ h3 {
 
 .plans-table tr.saving td {
   background: var(--green-100);
+}
+
+.plans-table tr.custom-row td {
+  background: var(--coral-50);
+  font-style: italic;
 }
 
 .plans-table td.positive {

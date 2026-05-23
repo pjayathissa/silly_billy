@@ -4,6 +4,15 @@ const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 // JS getDay(): 0=Sun,1=Mon,...,6=Sat  →  our checkbox index: 0=Mon,...,6=Sun
 const DAY_INDEX_TO_JS = [1, 2, 3, 4, 5, 6, 0];
 
+// Defaults applied when the user leaves a field blank before running analysis.
+const DEFAULTS = {
+  dailyCharge: { value: 230, label: "daily fixed charge", unit: "cents/day" },
+  baseRate: { value: 28.5, label: "base rate", unit: "cents/kWh" },
+  solarExportRate: { value: 12.5, label: "solar export rate", unit: "cents/kWh" },
+};
+
+const isBlank = (v) => v === "" || v == null;
+
 function emptyTouRate() {
   return { rate: "", startHour: 7, endHour: 21, days: [1, 2, 3, 4, 5, 6, 0] };
 }
@@ -34,6 +43,17 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
   });
 
   const [touRates, setTouRates] = useState(initialTouRates);
+
+  // Solar export (buy-back) rate, autofilled by the PDF parser when found.
+  const initialExportRate =
+    (confirmedTariff && confirmedTariff.solarExportRate != null
+      ? confirmedTariff.solarExportRate
+      : extractedTariff.solarExportRate) ?? "";
+  const [solarExportRate, setSolarExportRate] = useState(initialExportRate);
+
+  // Fields that were autofilled with defaults, shown in a confirmation modal.
+  const [autofillNotice, setAutofillNotice] = useState(null);
+  const [pendingTariff, setPendingTariff] = useState(null);
 
   const update = (field) => (e) =>
     setTariff((t) => ({ ...t, [field]: e.target.value }));
@@ -66,10 +86,21 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
   const removeTouRate = (index) =>
     setTouRates((prev) => prev.filter((_, i) => i !== index));
 
-  const handleConfirm = () => {
-    onConfirm({
-      dailyCharge: parseFloat(tariff.dailyCharge) || 0,
-      baseRate: parseFloat(tariff.baseRate) || 0,
+  const buildTariff = () => {
+    const autofilled = [];
+
+    const resolve = (field, raw) => {
+      if (isBlank(raw)) {
+        autofilled.push(DEFAULTS[field]);
+        return DEFAULTS[field].value;
+      }
+      return parseFloat(raw) || 0;
+    };
+
+    const result = {
+      dailyCharge: resolve("dailyCharge", tariff.dailyCharge),
+      baseRate: resolve("baseRate", tariff.baseRate),
+      // Time of use rates are left blank if not filled out (no default).
       touRates: touRates
         .filter((t) => t.rate !== "" && t.rate != null)
         .map((t) => ({
@@ -78,7 +109,25 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
           endHour: parseInt(t.endHour) || 0,
           days: t.days,
         })),
-    });
+      solarExportRate: resolve("solarExportRate", solarExportRate),
+    };
+
+    return { result, autofilled };
+  };
+
+  const handleConfirm = () => {
+    const { result, autofilled } = buildTariff();
+    if (autofilled.length > 0) {
+      setPendingTariff(result);
+      setAutofillNotice(autofilled);
+    } else {
+      onConfirm(result);
+    }
+  };
+
+  const acceptAutofill = () => {
+    setAutofillNotice(null);
+    onConfirm(pendingTariff);
   };
 
   return (
@@ -128,6 +177,15 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
         <div className="form-row">
           <label>Base rate (cents/kWh)</label>
           <input type="number" value={tariff.baseRate} onChange={update("baseRate")} placeholder="e.g. 28.5" />
+        </div>
+        <div className="form-row">
+          <label>Solar export rate (cents/kWh)</label>
+          <input
+            type="number"
+            value={solarExportRate}
+            onChange={(e) => setSolarExportRate(e.target.value)}
+            placeholder="e.g. 12.5"
+          />
         </div>
 
         {/* ── Time-of-Use Rates ── */}
@@ -214,6 +272,38 @@ export default function TariffReview({ extractedTariff, confirmedTariff, onConfi
       <button className="primary-btn" onClick={handleConfirm}>
         Run Analysis
       </button>
+
+      {autofillNotice && (
+        <div className="autofill-overlay" role="dialog" aria-modal="true">
+          <div className="autofill-modal">
+            <h3>Missing tariff values</h3>
+            {autofillNotice.length === 1 ? (
+              <p>
+                You haven't entered data for the {autofillNotice[0].label}, so
+                we've autofilled it with a default of {autofillNotice[0].value}{" "}
+                {autofillNotice[0].unit}.
+              </p>
+            ) : (
+              <>
+                <p>
+                  You haven't entered data for some fields, so we've autofilled
+                  them with these defaults:
+                </p>
+                <ul>
+                  {autofillNotice.map((f) => (
+                    <li key={f.label}>
+                      {f.label}: {f.value} {f.unit}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <button className="primary-btn" onClick={acceptAutofill}>
+              Continue to Analysis
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

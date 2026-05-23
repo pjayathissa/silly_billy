@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -8,6 +8,7 @@ import {
   dailyProfile, seasonalProfiles, weeklyTrend,
   generateInsights, currentAnnualCost, rankPlans,
 } from "../utils/analysis.js";
+import { batteryROI, solarROI, solarBreakdown, DISCOUNT_RATE, DEFAULT_LOAN_RATE, GREEN_LOAN_INTRO_RATE, GREEN_LOAN_INTRO_YEARS } from "../utils/solar.js";
 import { tariffsLastUpdated } from "../tariffs.js";
 import StepIndicator from "./StepIndicator.jsx";
 
@@ -117,6 +118,41 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
   const myCost = currentAnnualCost(data, currentTariff);
   const insights = generateInsights(data, currentTariff, nightLoadOptions);
   const plans = rankPlans(data, myCost);
+
+  // Two-way energy flows: households already exporting solar get a battery
+  // assessment (issue #36); everyone else gets a "should I install solar?"
+  // assessment (issue #37).
+  const totalExportKwh = data.reduce((s, d) => s + (d.exportKwh || 0), 0);
+  const hasSolar = totalExportKwh > 1;
+  const battery = hasSolar ? batteryROI(data, currentTariff) : null;
+  const solar = hasSolar ? null : solarROI(data, currentTariff);
+
+  // Customisable inputs for the detailed breakdown card. Empty string means
+  // "use the recommended default" (best scenario size/cost, default loan rate).
+  const [sizeInput, setSizeInput] = useState("");
+  const [capexInput, setCapexInput] = useState("");
+  const [rateInput, setRateInput] = useState("");
+  const [exportInput, setExportInput] = useState("");
+  const [greenLoan, setGreenLoan] = useState(false);
+
+  const defaultExportRate = currentTariff.solarExportRate || 0;
+  const breakdownSizeKw = sizeInput !== "" ? Number(sizeInput) : solar?.best?.sizeKw;
+  const breakdownCapex = capexInput !== "" ? Number(capexInput) : solar?.best?.capex;
+  const breakdownRate = rateInput !== "" ? Number(rateInput) / 100 : DEFAULT_LOAN_RATE;
+  const breakdownExportRate = exportInput !== "" ? Number(exportInput) : defaultExportRate;
+  // A custom row is shown in the comparison table when the system or export
+  // assumptions (the things that move the table's columns) have been changed.
+  const breakdownCustomised = sizeInput !== "" || capexInput !== "" || exportInput !== "";
+  const breakdown = useMemo(() => {
+    if (!solar || !solar.applicable) return null;
+    return solarBreakdown(data, currentTariff, {
+      sizeKw: breakdownSizeKw,
+      capex: breakdownCapex,
+      interestRate: breakdownRate,
+      exportRate: breakdownExportRate,
+      greenLoan,
+    });
+  }, [solar, data, currentTariff, breakdownSizeKw, breakdownCapex, breakdownRate, breakdownExportRate, greenLoan]);
 
   // Merge seasonal data for the overlay chart
   const seasonalMerged = profile.map((_, i) => ({
@@ -291,6 +327,274 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
             ))}
           </ul>
         </section>
+
+        {/* ── Battery Assessment (existing solar exporters — issue #36) ── */}
+        {battery && (
+          <section className="solar-section card-coral">
+            <h3>Battery Storage Assessment</h3>
+            {!battery.applicable ? (
+              <p className="chart-desc">{battery.reason}</p>
+            ) : (
+              <>
+                <p className="chart-desc">
+                  You exported solar across {battery.monthsCovered} month(s) of
+                  your data. We modelled an {battery.capacityKwh} kWh battery that
+                  stores daytime export and discharges it against your after-sunset
+                  load, carrying any unused charge to the next day.
+                </p>
+                <div className="solar-stats">
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Annual solar export</span>
+                    <span className="solar-stat-value">{Math.round(battery.annualExportKwh).toLocaleString()} kWh</span>
+                  </div>
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Energy shifted to evenings</span>
+                    <span className="solar-stat-value">{Math.round(battery.annualDischargeKwh).toLocaleString()} kWh/yr</span>
+                  </div>
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Estimated annual saving</span>
+                    <span className="solar-stat-value">${Math.round(battery.annualSaving).toLocaleString()}</span>
+                  </div>
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Battery cost (assumed)</span>
+                    <span className="solar-stat-value">${battery.cost.toLocaleString()}</span>
+                  </div>
+                  <div className="solar-stat">
+                    <span className="solar-stat-label">Discounted payback ({Math.round(DISCOUNT_RATE * 100)}%)</span>
+                    <span className="solar-stat-value">
+                      {battery.paybackYears != null ? `${battery.paybackYears.toFixed(1)} years` : "> 20 years"}
+                    </span>
+                  </div>
+                </div>
+                <p className={`solar-verdict verdict-${battery.recommendation}`}>
+                  {battery.recommendation === "recommend" &&
+                    "Recommended — the payback is under 15 years, so a battery looks worthwhile for your household."}
+                  {battery.recommendation === "consider" &&
+                    "Worth considering — the payback is under 20 years, but you may want to wait for battery prices to fall further before committing."}
+                  {battery.recommendation === "uneconomic" &&
+                    "The economics of a battery don't currently stack up for your household (payback over 20 years). It may still be worth it as a resilience / backup-power measure during outages."}
+                </p>
+              </>
+            )}
+          </section>
+        )}
+
+        {/* ── Solar Installation Assessment (non-exporters — issue #37) ── */}
+        {solar && solar.applicable && (
+          <section className="solar-section card-coral">
+            <h3>Should You Install Solar?</h3>
+            <p className="data-note" style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.25rem" }}>
+              Generation is modelled from average New Zealand sun-hours; installed
+              costs are from AI web research as of {solar.dataUpdated} and may
+              contain errors. Always get quotes for your specific roof and location.
+            </p>
+            <p className="chart-desc">
+              Modelled against your actual half-hourly usage. Self-consumed solar
+              saves your grid rate (~{Math.round(solar.avgGridRate)}c/kWh); surplus
+              is exported at {solar.exportRate ? `${solar.exportRate}c/kWh` : "your export rate (not set)"}.
+            </p>
+            <div className="table-wrapper">
+              <table className="plans-table">
+                <thead>
+                  <tr>
+                    <th>System</th>
+                    <th>Installed cost</th>
+                    <th>Annual generation</th>
+                    <th>Annual saving</th>
+                    <th>Payback ({Math.round(DISCOUNT_RATE * 100)}%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {solar.scenarios.map((s) => (
+                    <tr key={s.sizeKw} className={s.sizeKw === solar.best.sizeKw ? "saving" : ""}>
+                      <td className="retailer">{s.label}{s.sizeKw === solar.best.sizeKw ? " ★" : ""}</td>
+                      <td>${s.capex.toLocaleString()}</td>
+                      <td>{Math.round(s.annualGenerationKwh).toLocaleString()} kWh</td>
+                      <td>${Math.round(s.annualSaving).toLocaleString()}</td>
+                      <td>{s.paybackYears != null ? `${s.paybackYears.toFixed(1)} yrs` : "> 40 yrs"}</td>
+                    </tr>
+                  ))}
+                  {breakdownCustomised && breakdown && (
+                    <tr className="custom-row">
+                      <td className="retailer">{breakdown.sizeKw} kW (custom)</td>
+                      <td>${Math.round(breakdown.capex).toLocaleString()}</td>
+                      <td>{Math.round(breakdown.annualGenerationKwh).toLocaleString()} kWh</td>
+                      <td>${Math.round(breakdown.annualSaving).toLocaleString()}</td>
+                      <td>{breakdown.paybackYears != null ? `${breakdown.paybackYears.toFixed(1)} yrs` : "> 40 yrs"}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <p className={`solar-verdict verdict-${solar.recommendation}`}>
+              {solar.recommendation === "recommend" &&
+                `Recommended — the best value is the ${solar.best.label} system, paying back in about ${solar.best.paybackYears.toFixed(1)} years (under 10).`}
+              {solar.recommendation === "marginal" && (
+                <>
+                  At your current usage the best option ({solar.best.label}) pays
+                  back in about {solar.best.paybackYears.toFixed(1)} years.
+                  {solar.loadShift && solar.loadShift.percentOfLoad != null && (
+                    <>
+                      {" "}If you shifted roughly {Math.round(solar.loadShift.percentOfLoad)}% of
+                      your usage into daylight hours, the payback would drop under 10 years
+                      {solar.loadShift.achievable ? "." : " (though that may be more than your surplus generation can cover)."}
+                    </>
+                  )}
+                </>
+              )}
+              {solar.recommendation === "uneconomic" &&
+                `Solar doesn't currently stack up economically for your usage — the best option (${solar.best.label}) takes over 15 years to pay back. This can change as power prices rise or panel costs fall.`}
+            </p>
+            {solar.combined && solar.combined.paybackYears != null && (
+              <p className="solar-pairing chart-desc">
+                Pairing the {solar.best.label} system with an 8 kWh battery would
+                cost about ${solar.combined.capex.toLocaleString()} together and save
+                roughly ${Math.round(solar.combined.annualSaving).toLocaleString()}/year
+                (≈ {solar.combined.paybackYears.toFixed(1)} year payback)
+                {solar.combined.paybackYears < solar.best.paybackYears
+                  ? " — slightly better economics than solar alone."
+                  : " — but it does not improve on solar alone, so the battery is best treated as a resilience add-on."}
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* ── Solar Maths Breakdown ── */}
+        {solar && solar.applicable && breakdown && (
+          <section className="solar-section card-coral">
+            <h3>Solar Maths Breakdown</h3>
+            <p className="chart-desc">
+              How the numbers above are built up, for a {breakdown.sizeKw} kW system
+              costing ${breakdown.capex.toLocaleString()}, modelled against your actual
+              half-hourly usage. Adjust the assumptions below to match a real quote.
+            </p>
+
+            <div className="solar-customise">
+              <label className="solar-field">
+                <span>Solar system size (kW)</span>
+                <input
+                  type="number" min="0" step="0.5" inputMode="decimal"
+                  value={sizeInput !== "" ? sizeInput : String(solar.best.sizeKw)}
+                  onChange={(e) => setSizeInput(e.target.value)}
+                />
+              </label>
+              <label className="solar-field">
+                <span>System cost ($)</span>
+                <input
+                  type="number" min="0" step="500" inputMode="numeric"
+                  value={capexInput !== "" ? capexInput : String(solar.best.capex)}
+                  onChange={(e) => setCapexInput(e.target.value)}
+                />
+              </label>
+              <label className="solar-field">
+                <span>Solar export rate (c/kWh)</span>
+                <input
+                  type="number" min="0" step="0.5" inputMode="decimal"
+                  value={exportInput !== "" ? exportInput : String(defaultExportRate)}
+                  onChange={(e) => setExportInput(e.target.value)}
+                />
+              </label>
+              <label className="solar-field">
+                <span>Loan interest rate (%)</span>
+                <input
+                  type="number" min="0" step="0.1" inputMode="decimal"
+                  value={rateInput !== "" ? rateInput : String(Math.round(DEFAULT_LOAN_RATE * 100))}
+                  onChange={(e) => setRateInput(e.target.value)}
+                />
+              </label>
+              <label className="solar-field solar-field-checkbox">
+                <input
+                  type="checkbox" checked={greenLoan}
+                  onChange={(e) => setGreenLoan(e.target.checked)}
+                />
+                <span>Green loan ({Math.round(GREEN_LOAN_INTRO_RATE * 100)}% for the
+                  first {GREEN_LOAN_INTRO_YEARS} years, then floating)</span>
+              </label>
+            </div>
+
+            <div className="solar-stats">
+              <div className="solar-stat">
+                <span className="solar-stat-label">Saving from self-consumption</span>
+                <span className="solar-stat-value">${Math.round(breakdown.selfConsumptionSaving).toLocaleString()}/yr</span>
+              </div>
+              <div className="solar-stat">
+                <span className="solar-stat-label">Earnings from export</span>
+                <span className="solar-stat-value">${Math.round(breakdown.exportEarning).toLocaleString()}/yr</span>
+              </div>
+              <div className="solar-stat">
+                <span className="solar-stat-label">Total annual saving</span>
+                <span className="solar-stat-value">${Math.round(breakdown.annualSaving).toLocaleString()}/yr</span>
+              </div>
+              <div className="solar-stat">
+                <span className="solar-stat-label">Modelled annual generation</span>
+                <span className="solar-stat-value">{Math.round(breakdown.annualGenerationKwh).toLocaleString()} kWh</span>
+              </div>
+              <div className="solar-stat">
+                <span className="solar-stat-label">Payback period</span>
+                <span className="solar-stat-value">
+                  {breakdown.loan.repaid ? `${breakdown.loan.years.toFixed(1)} years` : "> 60 years"}
+                </span>
+              </div>
+            </div>
+
+            <h4 style={{ margin: "1rem 0 0.25rem" }}>Financing with a bank loan</h4>
+            <p className="chart-desc" style={{ marginTop: 0 }}>
+              {breakdown.loan.repaid ? (
+                <>
+                  Borrowing the ${breakdown.capex.toLocaleString()} on top of your mortgage
+                  {breakdown.loan.greenLoan
+                    ? ` at ${Math.round(GREEN_LOAN_INTRO_RATE * 100)}% for ${GREEN_LOAN_INTRO_YEARS} years then ${(breakdown.loan.floatingRate * 100).toFixed(1)}% floating`
+                    : ` at ${(breakdown.loan.floatingRate * 100).toFixed(1)}%`}
+                  , your ${Math.round(breakdown.annualSaving).toLocaleString()}/yr of savings
+                  pay it off in about {breakdown.loan.years.toFixed(1)} years.
+                  Total interest paid: ${Math.round(breakdown.loan.totalInterest).toLocaleString()}.
+                </>
+              ) : (
+                <>
+                  At {breakdown.loan.greenLoan
+                    ? `${Math.round(GREEN_LOAN_INTRO_RATE * 100)}% then ${(breakdown.loan.floatingRate * 100).toFixed(1)}% floating`
+                    : `${(breakdown.loan.floatingRate * 100).toFixed(1)}%`}
+                  , the ${Math.round(breakdown.annualSaving).toLocaleString()}/yr of savings don't
+                  cover the interest on a ${breakdown.capex.toLocaleString()} loan, so it never
+                  pays itself off — a lower rate or cheaper system is needed.
+                </>
+              )}
+            </p>
+
+            <h4 style={{ margin: "1rem 0 0.25rem" }}>Average day by month</h4>
+            <p className="chart-desc" style={{ marginTop: 0 }}>
+              Per-day averages for each month, so you can see how much generation is
+              actually used at home versus exported. Self-consumption plus export equals
+              generation.
+            </p>
+            <div className="table-wrapper">
+              <table className="plans-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Generation/day</th>
+                    <th>Consumption/day</th>
+                    <th>Self-consumed/day</th>
+                    <th>Exported/day</th>
+                    <th>Savings/day</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {breakdown.months.map((m) => (
+                    <tr key={m.month}>
+                      <td className="retailer">{m.month}</td>
+                      <td>{m.avgDailyGenerationKwh.toFixed(1)} kWh</td>
+                      <td>{m.avgDailyConsumptionKwh.toFixed(1)} kWh</td>
+                      <td>{m.avgDailySelfKwh.toFixed(1)} kWh</td>
+                      <td>{m.avgDailyExportKwh.toFixed(1)} kWh</td>
+                      <td>${m.avgDailySavingsDollars.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {/* ── Plan Comparison Table ── */}
         <section className="plans-section card-coral">
