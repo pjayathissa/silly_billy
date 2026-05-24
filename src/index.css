@@ -1032,6 +1032,18 @@ h3 {
   color: var(--grey-800);
 }
 
+.solar-stat-payback {
+  background: var(--coral-500);
+}
+
+.solar-stat-payback .solar-stat-label {
+  color: var(--coral-100);
+}
+
+.solar-stat-payback .solar-stat-value {
+  color: #fff;
+}
+
 .solar-verdict {
   margin-top: 1rem;
   padding: 0.85rem 1rem;
@@ -1251,5 +1263,32 @@ h3 {
 
   .step-indicator {
     padding: 0.5rem 1rem;
+  }
+
+  .solar-section {
+    padding: 1rem;
+  }
+
+  .solar-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .solar-stat {
+    min-width: 0;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .solar-stat-label {
+    font-size: 0.7rem;
+  }
+
+  .solar-stat-value {
+    font-size: 0.95rem;
+  }
+
+  .solar-stat-payback {
+    grid-column: 1 / -1;
   }
 }
