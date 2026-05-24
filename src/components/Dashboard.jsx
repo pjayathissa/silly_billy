@@ -401,7 +401,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                     <th>Installed cost</th>
                     <th>Annual generation</th>
                     <th>Annual saving</th>
-                    <th>Payback ({Math.round(DISCOUNT_RATE * 100)}%)</th>
+                    <th>Payback</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -420,7 +420,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                       <td>${Math.round(breakdown.capex).toLocaleString()}</td>
                       <td>{Math.round(breakdown.annualGenerationKwh).toLocaleString()} kWh</td>
                       <td>${Math.round(breakdown.annualSaving).toLocaleString()}</td>
-                      <td>{breakdown.paybackYears != null ? `${breakdown.paybackYears.toFixed(1)} yrs` : "> 40 yrs"}</td>
+                      <td>{breakdown.loan.repaid ? `${breakdown.loan.years.toFixed(1)} yrs` : "> 60 yrs"}</td>
                     </tr>
                   )}
                 </tbody>
@@ -513,6 +513,12 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
             </div>
 
             <div className="solar-stats">
+              <div className="solar-stat solar-stat-payback">
+                <span className="solar-stat-label">Payback period</span>
+                <span className="solar-stat-value">
+                  {breakdown.loan.repaid ? `${breakdown.loan.years.toFixed(1)} years` : "> 60 years"}
+                </span>
+              </div>
               <div className="solar-stat">
                 <span className="solar-stat-label">Saving from self-consumption</span>
                 <span className="solar-stat-value">${Math.round(breakdown.selfConsumptionSaving).toLocaleString()}/yr</span>
@@ -528,12 +534,6 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
               <div className="solar-stat">
                 <span className="solar-stat-label">Modelled annual generation</span>
                 <span className="solar-stat-value">{Math.round(breakdown.annualGenerationKwh).toLocaleString()} kWh</span>
-              </div>
-              <div className="solar-stat">
-                <span className="solar-stat-label">Payback period</span>
-                <span className="solar-stat-value">
-                  {breakdown.loan.repaid ? `${breakdown.loan.years.toFixed(1)} years` : "> 60 years"}
-                </span>
               </div>
             </div>
 
