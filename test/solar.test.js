@@ -3,6 +3,7 @@ import {
   batteryROI,
   solarROI,
   solarBreakdown,
+  applyLoadShift,
   discountedPayback,
   gridRateForReading,
   SOLAR_SCENARIOS,
@@ -286,5 +287,59 @@ describe("solarBreakdown", () => {
     const b = solarBreakdown(yearLoad, tariff, { sizeKw: 0.01, capex: 100000, interestRate: 0.1 });
     expect(b.loan.repaid).toBe(false);
     expect(b.loan.years).toBeNull();
+  });
+
+  it("load shifting lifts self-consumption savings without inventing generation", () => {
+    // Night-heavy load: most consumption is outside sunlit hours, so shifting it
+    // into the day lets solar self-consume it instead of exporting cheaply.
+    const nightHeavy = buildData("2025-01-01T00:00:00", 365, (h) =>
+      h >= 19 || h < 6 ? { kwh: 1.5, exportKwh: 0 } : { kwh: 0.1, exportKwh: 0 }
+    );
+    const base = solarBreakdown(nightHeavy, tariff, { sizeKw: 8.5, capex: 16500 });
+    const shifted = solarBreakdown(nightHeavy, tariff, { sizeKw: 8.5, capex: 16500, loadShiftPercent: 100 });
+
+    // Self-consumption (worth the full grid rate) rises, export falls.
+    expect(shifted.selfConsumptionSaving).toBeGreaterThan(base.selfConsumptionSaving);
+    expect(shifted.annualSaving).toBeGreaterThan(base.annualSaving);
+    // Generation is a property of the panels, not the load: it must not change.
+    expect(shifted.annualGenerationKwh).toBeCloseTo(base.annualGenerationKwh, 5);
+    expect(shifted.loadShiftPercent).toBe(100);
+  });
+});
+
+// ─── applyLoadShift ──────────────────────────────────────────
+
+describe("applyLoadShift", () => {
+  const oneDay = buildData("2025-01-15T00:00:00", 1, (h) =>
+    h >= 19 || h < 6 ? { kwh: 1.0, exportKwh: 0 } : { kwh: 0.2, exportKwh: 0 }
+  );
+
+  it("returns the input unchanged at 0%", () => {
+    expect(applyLoadShift(oneDay, 0)).toBe(oneDay);
+  });
+
+  it("conserves total daily load", () => {
+    const total = (d) => d.reduce((s, r) => s + r.kwh, 0);
+    const shifted = applyLoadShift(oneDay, 0.5);
+    expect(total(shifted)).toBeCloseTo(total(oneDay), 6);
+  });
+
+  it("moves out-of-sun load into daylight hours", () => {
+    const inDaylight = (d) =>
+      d.filter((r) => {
+        const h = r.timestamp.getHours();
+        return h >= 7 && h < 19; // comfortably inside the Jan window
+      }).reduce((s, r) => s + r.kwh, 0);
+    const before = inDaylight(oneDay);
+    const after = inDaylight(applyLoadShift(oneDay, 1));
+    expect(after).toBeGreaterThan(before);
+  });
+
+  it("clamps the fraction to [0, 1]", () => {
+    const total = (d) => d.reduce((s, r) => s + r.kwh, 0);
+    const overshoot = applyLoadShift(oneDay, 5);
+    expect(total(overshoot)).toBeCloseTo(total(oneDay), 6);
+    // No reading should go negative.
+    expect(overshoot.every((r) => r.kwh >= 0)).toBe(true);
   });
 });

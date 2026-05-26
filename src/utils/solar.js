@@ -96,6 +96,56 @@ function isAfterSunset(timestamp) {
   return hourFloat >= NZ_SUNSET_HOUR[timestamp.getMonth()];
 }
 
+/** Is this reading within the solar daylight window for its month? */
+function isDaylight(timestamp) {
+  const [start, end] = NZ_DAYLIGHT[timestamp.getMonth()];
+  const hourFloat = timestamp.getHours() + timestamp.getMinutes() / 60;
+  return hourFloat >= start && hourFloat < end;
+}
+
+/**
+ * Load shifting (issue #50): move a fraction of each day's load that falls
+ * outside the solar daylight window into it, spread evenly across the day's
+ * daylight readings. `fraction` is 0–1 (0 = no change, 1 = shift all out-of-sun
+ * load into sunlit hours). Returns a new array of readings with adjusted `kwh`;
+ * timestamps and export are untouched. Days with no daylight readings are left
+ * unchanged. The total daily load is conserved.
+ */
+export function applyLoadShift(data, fraction) {
+  if (!data || data.length === 0) return data;
+  const f = Math.max(0, Math.min(1, fraction || 0));
+  if (f === 0) return data;
+
+  const byDay = new Map();
+  for (const r of data) {
+    const k = dateKey(r.timestamp);
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(r);
+  }
+
+  const result = [];
+  for (const readings of byDay.values()) {
+    const copies = readings.map((r) => ({ ...r }));
+    const daylightIdx = [];
+    let shifted = 0;
+    copies.forEach((r, i) => {
+      if (isDaylight(r.timestamp)) {
+        daylightIdx.push(i);
+      } else {
+        const move = (r.kwh || 0) * f;
+        r.kwh = (r.kwh || 0) - move;
+        shifted += move;
+      }
+    });
+    if (daylightIdx.length > 0 && shifted > 0) {
+      const per = shifted / daylightIdx.length;
+      for (const i of daylightIdx) copies[i].kwh = (copies[i].kwh || 0) + per;
+    }
+    for (const r of copies) result.push(r);
+  }
+  return result;
+}
+
 /** Span of a dataset in days (>= 1). */
 function spanDays(data) {
   const first = data[0].timestamp.getTime();
@@ -514,7 +564,10 @@ function loanTerm(principal, annualRepayment, rateForYear, maxYears = 60) {
  * consumption and export for a given system size against the user's actual
  * load, plus a bank-loan view of the economics.
  *
- * opts: { sizeKw, capex, interestRate (decimal), greenLoan (bool) }.
+ * opts: { sizeKw, capex, interestRate (decimal), greenLoan (bool),
+ *         loadShiftPercent (0–100) }.
+ * loadShiftPercent moves that fraction of out-of-sun load into sunlit hours
+ * before modelling, which lifts self-consumption (issue #50).
  * Note that for every reading self-consumption + export equals generation, so
  * the per-day self and export columns always sum to the generation column.
  */
@@ -526,9 +579,13 @@ export function solarBreakdown(data, tariff, opts = {}) {
   const floatingRate = opts.interestRate ?? DEFAULT_LOAN_RATE;
   const greenLoan = !!opts.greenLoan;
   const exportRate = opts.exportRate ?? (tariff.solarExportRate || 0);
+  const loadShiftPercent = opts.loadShiftPercent ?? 0;
 
+  // Span (for annualising) comes from the original timestamps, which the load
+  // shift leaves untouched.
   const span = spanDays(data);
   const annualScale = 365 / span;
+  const modelData = applyLoadShift(data, loadShiftPercent / 100);
 
   const genSum = new Array(12).fill(0);
   const loadSum = new Array(12).fill(0);
@@ -540,7 +597,7 @@ export function solarBreakdown(data, tariff, opts = {}) {
   let selfCents = 0;
   let exportCents = 0;
 
-  for (const r of data) {
+  for (const r of modelData) {
     const m = r.timestamp.getMonth();
     const load = r.kwh || 0;
     const gen = generationForReading(r.timestamp, sizeKw);
@@ -593,6 +650,7 @@ export function solarBreakdown(data, tariff, opts = {}) {
     sizeKw,
     capex,
     exportRate,
+    loadShiftPercent,
     selfConsumptionSaving,
     exportEarning,
     annualSaving,
