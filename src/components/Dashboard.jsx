@@ -29,6 +29,10 @@ const TOU_STROKE_COLORS = [
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+// Default load-shifting assumption used across the solar cards (issue: a 0%
+// default understates a realistic outcome, so we model a modest 20% shift).
+const DEFAULT_LOAD_SHIFT_PERCENT = 20;
+
 /**
  * Convert an hour number (0–23) to the "HH:00" format used as the x-axis dataKey.
  */
@@ -141,7 +145,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
   const breakdownCapex = capexInput !== "" ? Number(capexInput) : solar?.best?.capex;
   const breakdownRate = rateInput !== "" ? Number(rateInput) / 100 : DEFAULT_LOAN_RATE;
   const breakdownExportRate = exportInput !== "" ? Number(exportInput) : defaultExportRate;
-  const breakdownLoadShift = loadShiftInput !== "" ? Number(loadShiftInput) : 0;
+  const breakdownLoadShift = loadShiftInput !== "" ? Number(loadShiftInput) : DEFAULT_LOAD_SHIFT_PERCENT;
   // A custom row is shown in the comparison table when the system, export or
   // load-shift assumptions (the things that move the table's columns) change.
   const breakdownCustomised =
@@ -157,6 +161,20 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
       greenLoan,
     });
   }, [solar, data, currentTariff, breakdownSizeKw, breakdownCapex, breakdownRate, breakdownExportRate, breakdownLoadShift, greenLoan]);
+
+  // Discounted payback of the recommended ("best") system once the current
+  // load-shift assumption is applied, so the "Should you install solar?" callout
+  // can show a real number that tracks the load-shifting input.
+  const bestPaybackAtShift = useMemo(() => {
+    if (!solar || !solar.applicable || !solar.best) return null;
+    const b = solarBreakdown(data, currentTariff, {
+      sizeKw: solar.best.sizeKw,
+      capex: solar.best.capex,
+      exportRate: defaultExportRate,
+      loadShiftPercent: breakdownLoadShift,
+    });
+    return b ? b.paybackYears : null;
+  }, [solar, data, currentTariff, defaultExportRate, breakdownLoadShift]);
 
   // Merge seasonal data for the overlay chart
   const seasonalMerged = profile.map((_, i) => ({
@@ -437,13 +455,13 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 <>
                   At your current usage the best option ({solar.best.label}) pays
                   back in about {solar.best.paybackYears.toFixed(1)} years.
-                  {solar.loadShift && solar.loadShift.percentOfLoad != null && (
-                    <>
-                      {" "}If you shifted roughly {Math.round(solar.loadShift.percentOfLoad)}% of
-                      your usage into daylight hours, the payback would drop under 10 years
-                      {solar.loadShift.achievable ? "." : " (though that may be more than your surplus generation can cover)."}
-                    </>
-                  )}
+                  {" "}If you shift roughly {breakdownLoadShift}% of your usage into
+                  daylight hours, the payback{" "}
+                  {bestPaybackAtShift != null
+                    ? `comes down to about ${bestPaybackAtShift.toFixed(1)} years`
+                    : "is still beyond 40 years"}.
+                  {" "}Adjust the load-shifting assumption in the breakdown below to
+                  see how this changes.
                 </>
               )}
               {solar.recommendation === "uneconomic" &&
@@ -478,7 +496,8 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 <span>Solar system size (kW)</span>
                 <input
                   type="number" min="0" step="0.5" inputMode="decimal"
-                  value={sizeInput !== "" ? sizeInput : String(solar.best.sizeKw)}
+                  value={sizeInput}
+                  placeholder={String(solar.best.sizeKw)}
                   onChange={(e) => setSizeInput(e.target.value)}
                 />
               </label>
@@ -486,7 +505,8 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 <span>System cost ($)</span>
                 <input
                   type="number" min="0" step="500" inputMode="numeric"
-                  value={capexInput !== "" ? capexInput : String(solar.best.capex)}
+                  value={capexInput}
+                  placeholder={String(solar.best.capex)}
                   onChange={(e) => setCapexInput(e.target.value)}
                 />
               </label>
@@ -494,7 +514,8 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 <span>Solar export rate (c/kWh)</span>
                 <input
                   type="number" min="0" step="0.5" inputMode="decimal"
-                  value={exportInput !== "" ? exportInput : String(defaultExportRate)}
+                  value={exportInput}
+                  placeholder={String(defaultExportRate)}
                   onChange={(e) => setExportInput(e.target.value)}
                 />
               </label>
@@ -502,14 +523,19 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 <span>Loan interest rate (%)</span>
                 <input
                   type="number" min="0" step="0.1" inputMode="decimal"
-                  value={rateInput !== "" ? rateInput : String(Math.round(DEFAULT_LOAN_RATE * 100))}
+                  value={rateInput}
+                  placeholder={String(Math.round(DEFAULT_LOAN_RATE * 100))}
                   onChange={(e) => setRateInput(e.target.value)}
                 />
               </label>
               <label className="solar-field">
                 <span className="solar-field-label">
                   Load shifting (%)
-                  <span className="info-tooltip" tabIndex={0}>
+                  <span
+                    className="info-tooltip"
+                    tabIndex={0}
+                    onClick={(e) => e.preventDefault()}
+                  >
                     <span className="info-tooltip-icon" aria-hidden="true">?</span>
                     <span className="info-tooltip-bubble" role="tooltip">
                       <strong>What is load shifting?</strong>
@@ -534,7 +560,8 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                 </span>
                 <input
                   type="number" min="0" max="100" step="5" inputMode="numeric"
-                  value={loadShiftInput !== "" ? loadShiftInput : "0"}
+                  value={loadShiftInput}
+                  placeholder={String(DEFAULT_LOAD_SHIFT_PERCENT)}
                   onChange={(e) => setLoadShiftInput(e.target.value)}
                 />
               </label>
