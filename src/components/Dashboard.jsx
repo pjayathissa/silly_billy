@@ -133,6 +133,7 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
   const [capexInput, setCapexInput] = useState("");
   const [rateInput, setRateInput] = useState("");
   const [exportInput, setExportInput] = useState("");
+  const [loadShiftInput, setLoadShiftInput] = useState("");
   const [greenLoan, setGreenLoan] = useState(false);
 
   const defaultExportRate = currentTariff.solarExportRate || 0;
@@ -140,9 +141,11 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
   const breakdownCapex = capexInput !== "" ? Number(capexInput) : solar?.best?.capex;
   const breakdownRate = rateInput !== "" ? Number(rateInput) / 100 : DEFAULT_LOAN_RATE;
   const breakdownExportRate = exportInput !== "" ? Number(exportInput) : defaultExportRate;
-  // A custom row is shown in the comparison table when the system or export
-  // assumptions (the things that move the table's columns) have been changed.
-  const breakdownCustomised = sizeInput !== "" || capexInput !== "" || exportInput !== "";
+  const breakdownLoadShift = loadShiftInput !== "" ? Number(loadShiftInput) : 0;
+  // A custom row is shown in the comparison table when the system, export or
+  // load-shift assumptions (the things that move the table's columns) change.
+  const breakdownCustomised =
+    sizeInput !== "" || capexInput !== "" || exportInput !== "" || loadShiftInput !== "";
   const breakdown = useMemo(() => {
     if (!solar || !solar.applicable) return null;
     return solarBreakdown(data, currentTariff, {
@@ -150,9 +153,10 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
       capex: breakdownCapex,
       interestRate: breakdownRate,
       exportRate: breakdownExportRate,
+      loadShiftPercent: breakdownLoadShift,
       greenLoan,
     });
-  }, [solar, data, currentTariff, breakdownSizeKw, breakdownCapex, breakdownRate, breakdownExportRate, greenLoan]);
+  }, [solar, data, currentTariff, breakdownSizeKw, breakdownCapex, breakdownRate, breakdownExportRate, breakdownLoadShift, greenLoan]);
 
   // Merge seasonal data for the overlay chart
   const seasonalMerged = profile.map((_, i) => ({
@@ -500,6 +504,38 @@ export default function Dashboard({ data, currentTariff, onStepClick }) {
                   type="number" min="0" step="0.1" inputMode="decimal"
                   value={rateInput !== "" ? rateInput : String(Math.round(DEFAULT_LOAN_RATE * 100))}
                   onChange={(e) => setRateInput(e.target.value)}
+                />
+              </label>
+              <label className="solar-field">
+                <span className="solar-field-label">
+                  Load shifting (%)
+                  <span className="info-tooltip" tabIndex={0}>
+                    <span className="info-tooltip-icon" aria-hidden="true">?</span>
+                    <span className="info-tooltip-bubble" role="tooltip">
+                      <strong>What is load shifting?</strong>
+                      <span>
+                        Moving energy use from outside sunlit hours into the middle
+                        of the day so it runs off your own solar instead of the grid.
+                        It doesn&apos;t reduce how much you use — it just reshapes when.
+                      </span>
+                      <span>
+                        0% = no change. 100% = every bit of out-of-sun load is
+                        spread evenly across daylight hours. Indicative figures for a
+                        home with no controls today:
+                      </span>
+                      <span>
+                        • Dishwasher run during the day: <strong>~5%</strong><br />
+                        • Timer on the hot-water cylinder: <strong>~25%</strong><br />
+                        • EV charged during the day, not overnight: <strong>~50%</strong>
+                      </span>
+                      <span>Stack these up if more than one applies to you.</span>
+                    </span>
+                  </span>
+                </span>
+                <input
+                  type="number" min="0" max="100" step="5" inputMode="numeric"
+                  value={loadShiftInput !== "" ? loadShiftInput : "0"}
+                  onChange={(e) => setLoadShiftInput(e.target.value)}
                 />
               </label>
               <label className="solar-field solar-field-checkbox">
